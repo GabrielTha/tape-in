@@ -8,6 +8,7 @@ add_library(tapein_core STATIC
     src/util/base64.cpp
     src/rtsp/rtsp_message.cpp
     src/rtsp/rtsp_parser.cpp
+    src/rtsp/sdp.cpp
 )
 add_library(tapein::core ALIAS tapein_core)
 

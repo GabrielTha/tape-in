@@ -20,10 +20,19 @@ covered by unit tests with OpenSSL-generated vectors and by a real iPhone.
 Wired into CTest as `pyatv_integration` when configured with
 `-DTAPEIN_INTEGRATION=ON` (CI does this on macOS and Linux).
 
-## raop_play (encrypted ALAC path, best effort)
+## cliraop (encrypted PCM and ALAC paths)
 
-See `raop_play_test.sh`. philippe44/libraop has no license file, so it is
-built as a test tool only when `TAPEIN_LIBRAOP=1` and never vendored.
+```sh
+tests/integration/raop_play_test.sh build/tools/tapein-cli /path/to/cliraop
+```
+
+`cliraop` is philippe44/libraop's command-line sender (MIT). It does what
+iTunes did: Apple-Challenge, RSA-OAEP-wrapped AES key, AES-128-CBC, PCM or
+ALAC (`-a`). Build it from https://github.com/philippe44/libraop or use a
+prebuilt binary from that repository's `bin/` directory. The script runs
+three sessions (clear PCM, encrypted PCM, encrypted ALAC) and compares each
+received file sample by sample. It is not wired into CI because it needs an
+external binary; run it locally before a release.
 
 ## Tools
 

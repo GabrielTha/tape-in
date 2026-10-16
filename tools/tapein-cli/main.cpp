@@ -5,6 +5,7 @@
 // receives to a WAV file. Phase-1 tool; no audio device, no resampling.
 
 #include "tapein/cli/args.h"
+#include "tapein/cli/capture_writer.h"
 #include "tapein/cli/wav_sink.h"
 #include "tapein/core/crypto/raop_key.h"
 #include "tapein/core/net/reactor.h"
@@ -113,6 +114,18 @@ int main(int argc, char** argv)
     config.txtEt = args.txtEt;
     config.answerAppleChallenge = args.answerAppleChallenge;
     config.log = log;
+
+    std::unique_ptr<cli::CaptureWriter> capture;
+    if (!args.captureDir.empty()) {
+        capture = std::make_unique<cli::CaptureWriter>(args.captureDir);
+        config.captureRtsp = [&capture](uint64_t id, bool outbound, std::span<const uint8_t> bytes) {
+            capture->rtsp(id, outbound, bytes);
+        };
+        config.captureRtp = [&capture](uint64_t id, uint8_t kind, std::span<const uint8_t> bytes) {
+            capture->rtp(id, static_cast<cli::CaptureWriter::Socket>(kind), bytes);
+        };
+        logLine("capturing raw traffic to " + std::filesystem::absolute(args.captureDir).string());
+    }
 
     core::session::Receiver receiver(reactor, config, sink, *advertiser, key.value());
     if (auto r = receiver.start(); !r.ok()) {

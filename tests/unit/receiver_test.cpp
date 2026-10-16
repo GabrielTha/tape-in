@@ -665,6 +665,33 @@ TEST_CASE("same client reconnecting replaces its live session")
     REQUIRE(fx.receiver->sessionCount() == 1);
 }
 
+TEST_CASE("capture callbacks see RTSP bytes both ways and RTP datagrams")
+{
+    Fixture fx(1);
+    fx.receiver->stop();
+    std::vector<std::pair<bool, std::string>> rtsp;
+    std::vector<std::pair<uint8_t, size_t>> rtp;
+    fx.config.captureRtsp = [&](uint64_t, bool outbound, std::span<const uint8_t> bytes) {
+        rtsp.emplace_back(outbound, std::string(bytes.begin(), bytes.end()));
+    };
+    fx.config.captureRtp = [&](uint64_t, uint8_t socketKind, std::span<const uint8_t> bytes) {
+        rtp.emplace_back(socketKind, bytes.size());
+    };
+    fx.receiver = std::make_unique<Receiver>(fx.reactor, fx.config, fx.sink, fx.advertiser, fx.key);
+    REQUIRE(fx.receiver->start().ok());
+    Client c(fx);
+    REQUIRE(c.startStream(true).status == 200);
+    c.sendAudio(0, 0, l16Payload(tone(0)));
+    REQUIRE(fx.pumpUntil([&] { return !rtp.empty(); }));
+    REQUIRE(rtp[0].first == 0); // audio socket
+    REQUIRE(rtp[0].second == 12 + kSamples * 2);
+    REQUIRE(rtsp.size() >= 6); // 3 requests in, 3 responses out
+    REQUIRE_FALSE(rtsp[0].first);
+    REQUIRE(rtsp[0].second.starts_with("ANNOUNCE"));
+    REQUIRE(rtsp[1].first);
+    REQUIRE(rtsp[1].second.starts_with("RTSP/1.0 200"));
+}
+
 TEST_CASE("stop ends all sessions and unpublishes")
 {
     Fixture fx(1);

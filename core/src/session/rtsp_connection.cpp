@@ -7,8 +7,13 @@
 
 namespace tapein::core::session {
 
-RtspConnection::RtspConnection(uint64_t id, net::TcpSocket socket, RequestHandler onRequest, CloseHandler onClose)
-    : m_id(id), m_socket(std::move(socket)), m_onRequest(std::move(onRequest)), m_onClose(std::move(onClose))
+RtspConnection::RtspConnection(uint64_t id, net::TcpSocket socket, RequestHandler onRequest, CloseHandler onClose,
+                               CaptureHandler capture)
+    : m_id(id)
+    , m_socket(std::move(socket))
+    , m_onRequest(std::move(onRequest))
+    , m_onClose(std::move(onClose))
+    , m_capture(std::move(capture))
 {
 }
 
@@ -23,6 +28,9 @@ void RtspConnection::onReadable()
         }
         if (n.value() == 0) {
             return; // nothing more right now
+        }
+        if (m_capture) {
+            m_capture(m_id, false, std::span<const uint8_t>(buf.data(), n.value()));
         }
         auto requests = m_parser.feed(std::span<const uint8_t>(buf.data(), n.value()));
         if (!requests.ok()) {
@@ -44,6 +52,9 @@ void RtspConnection::send(const rtsp::Response& response)
         return;
     }
     const auto bytes = response.serialize();
+    if (m_capture) {
+        m_capture(m_id, true, bytes);
+    }
     size_t offset = 0;
     while (offset < bytes.size()) {
         auto n = m_socket.write(std::span<const uint8_t>(bytes.data() + offset, bytes.size() - offset));

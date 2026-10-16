@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -33,6 +34,9 @@ struct ReceiverConfig {
     std::string txtEt = "0,1"; ///< experiment hook: "0" advertises no encryption
     bool answerAppleChallenge = true; ///< experiment hook
     std::function<void(std::string)> log; ///< optional, network thread
+    /// Optional raw-traffic taps for the capture tool (network thread).
+    std::function<void(uint64_t connectionId, bool outbound, std::span<const uint8_t>)> captureRtsp;
+    std::function<void(uint64_t sessionId, uint8_t socketKind, std::span<const uint8_t>)> captureRtp;
 };
 
 /// One advertised RAOP receiver: the RTSP listener, its connections and

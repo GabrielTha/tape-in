@@ -26,10 +26,18 @@ def read_wav(path: str):
     return struct.unpack(f"<{count}h", raw[: count * 2])
 
 
-def first_loud(samples, threshold: int) -> int:
+def first_loud(samples, threshold: int, run: int = 400) -> int:
+    """Index of the first sample that starts `run` consecutive samples at or
+    above `threshold` (the click marker is 50 ms of full scale; stray loud
+    samples such as a WAV header read as audio never last that long)."""
+    count = 0
     for i, s in enumerate(samples):
         if abs(s) >= threshold:
-            return i
+            count += 1
+            if count == run:
+                return i - run + 1
+        else:
+            count = 0
     return -1
 
 

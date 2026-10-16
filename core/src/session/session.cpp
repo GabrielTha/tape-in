@@ -146,30 +146,35 @@ void Session::end(std::string_view reason)
 
 // ------------------------------------------------------------------ sockets
 
-void Session::drain(net::UdpSocket& socket, void (Session::*handler)(std::span<const uint8_t>, const net::Endpoint&))
+void Session::drain(net::UdpSocket& socket, uint8_t socketKind,
+                    void (Session::*handler)(std::span<const uint8_t>, const net::Endpoint&))
 {
     for (int i = 0; i < 64 && !m_ended; ++i) {
         auto r = socket.recvFrom(m_datagram);
         if (!r.ok() || r.value().first == 0) {
             return;
         }
-        (this->*handler)(std::span<const uint8_t>(m_datagram.data(), r.value().first), r.value().second);
+        const std::span<const uint8_t> datagram(m_datagram.data(), r.value().first);
+        if (m_config.captureRtp) {
+            m_config.captureRtp(m_info.id, socketKind, datagram);
+        }
+        (this->*handler)(datagram, r.value().second);
     }
 }
 
 void Session::onAudioReadable()
 {
-    drain(m_audioSocket, &Session::onAudioDatagram);
+    drain(m_audioSocket, 0, &Session::onAudioDatagram);
 }
 
 void Session::onControlReadable()
 {
-    drain(m_controlSocket, &Session::onControlDatagram);
+    drain(m_controlSocket, 1, &Session::onControlDatagram);
 }
 
 void Session::onTimingReadable()
 {
-    drain(m_timingSocket, &Session::onTimingDatagram);
+    drain(m_timingSocket, 2, &Session::onTimingDatagram);
 }
 
 void Session::onAudioDatagram(std::span<const uint8_t> datagram, const net::Endpoint&)

@@ -6,6 +6,7 @@
 add_library(tapein_cli_lib STATIC
     tapein-cli/args.cpp
     tapein-cli/wav_sink.cpp
+    tapein-cli/capture_writer.cpp
 )
 add_library(tapein::cli_lib ALIAS tapein_cli_lib)
 target_include_directories(tapein_cli_lib PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)

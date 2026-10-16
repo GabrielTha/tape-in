@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <span>
 #include <string>
 
 namespace tapein::core::session {
@@ -23,8 +24,10 @@ class RtspConnection {
 public:
     using RequestHandler = std::function<void(RtspConnection&, const rtsp::Request&)>;
     using CloseHandler = std::function<void(RtspConnection&, std::string_view reason)>;
+    using CaptureHandler = std::function<void(uint64_t connectionId, bool outbound, std::span<const uint8_t>)>;
 
-    RtspConnection(uint64_t id, net::TcpSocket socket, RequestHandler onRequest, CloseHandler onClose);
+    RtspConnection(uint64_t id, net::TcpSocket socket, RequestHandler onRequest, CloseHandler onClose,
+                   CaptureHandler capture = nullptr);
 
     [[nodiscard]] uint64_t id() const noexcept { return m_id; }
     [[nodiscard]] net::NativeHandle handle() const noexcept { return m_socket.handle(); }
@@ -55,6 +58,7 @@ private:
     rtsp::Parser m_parser;
     RequestHandler m_onRequest;
     CloseHandler m_onClose;
+    CaptureHandler m_capture;
     bool m_closed = false;
 };
 

@@ -257,7 +257,7 @@ void Receiver::onAccept(net::TcpListener& listener)
         auto conn = std::make_unique<RtspConnection>(
             id, std::move(accepted.value()),
             [this](RtspConnection& c, const rtsp::Request& r) { onRequest(c, r); },
-            [this](RtspConnection& c, std::string_view reason) { onConnectionClosed(c, reason); });
+            [this](RtspConnection& c, std::string_view reason) { onConnectionClosed(c, reason); }, m_config.captureRtsp);
         m_reactor.add(conn->handle(), [ptr = conn.get()] { ptr->onReadable(); });
         log("connection " + std::to_string(id) + " from " + conn->peerEndpoint().map([](const net::Endpoint& e) { return e.toString(); }).value());
         m_connections.push_back(std::move(conn));
@@ -403,6 +403,7 @@ void Receiver::handleAnnounce(RtspConnection& conn, const rtsp::Request& request
 
     SessionConfig sc;
     sc.holdBackPackets = m_config.holdBackPackets;
+    sc.captureRtp = m_config.captureRtp;
     auto session = std::make_unique<Session>(m_reactor, info, params.value(), aesKey, m_sink, sc,
                                              [this](std::string m) { log(std::move(m)); });
     conn.sessionId = info.id;

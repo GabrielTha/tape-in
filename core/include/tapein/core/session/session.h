@@ -31,6 +31,9 @@ struct SessionConfig {
     std::chrono::milliseconds resendFirstAfter{100};
     std::chrono::milliseconds resendRepeatEvery{250};
     std::chrono::seconds inactivityTimeout{30};
+    /// Optional tap for every received datagram: socketKind 0 = audio,
+    /// 1 = control, 2 = timing.
+    std::function<void(uint64_t sessionId, uint8_t socketKind, std::span<const uint8_t>)> captureRtp;
 };
 
 /// One audio stream: three UDP sockets, decryption, decoding, the jitter
@@ -81,7 +84,8 @@ private:
     void sendTimingRequest();
     void onInactivityTick();
     void releaseBlock(const buffer::ReleasedBlock& block);
-    void drain(net::UdpSocket& socket, void (Session::*handler)(std::span<const uint8_t>, const net::Endpoint&));
+    void drain(net::UdpSocket& socket, uint8_t socketKind,
+               void (Session::*handler)(std::span<const uint8_t>, const net::Endpoint&));
     void onAudioDatagram(std::span<const uint8_t> datagram, const net::Endpoint& from);
     void onControlDatagram(std::span<const uint8_t> datagram, const net::Endpoint& from);
     void onTimingDatagram(std::span<const uint8_t> datagram, const net::Endpoint& from);

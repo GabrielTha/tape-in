@@ -28,6 +28,7 @@ include(CompilerWarnings)
 include(Sanitizers)
 include(Dependencies)
 
+add_subdirectory(third_party/alac)
 add_subdirectory(core)
 
 if(TAPEIN_BUILD_TESTS)

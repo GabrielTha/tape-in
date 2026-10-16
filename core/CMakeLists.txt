@@ -12,6 +12,7 @@ add_library(tapein_core STATIC
     src/crypto/raop_key.cpp
     src/crypto/apple_challenge.cpp
     src/crypto/aes_cbc.cpp
+    src/codec/alac_decoder.cpp
 )
 add_library(tapein::core ALIAS tapein_core)
 
@@ -20,4 +21,5 @@ target_include_directories(tapein_core PUBLIC
 target_compile_features(tapein_core PUBLIC cxx_std_20)
 target_link_libraries(tapein_core
     PRIVATE tapein::warnings
-    PRIVATE MbedTLS::mbedcrypto)
+    PRIVATE MbedTLS::mbedcrypto
+    PRIVATE alac::codec)

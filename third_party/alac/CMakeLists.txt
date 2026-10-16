@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Tape In contributors
 #
 # Apple Lossless Audio Codec reference implementation (Apache-2.0), vendored
-# unchanged from macosforge/alac. See UPSTREAM and THIRD_PARTY.md.
+# from macosforge/alac with the validation patches listed in UPSTREAM.
 #
 # Three targets:
 #   alac::common  - bit reader and endian helpers shared by both sides

@@ -25,6 +25,13 @@ option(TAPEIN_INTEGRATION "Register the pyatv integration test with CTest (needs
 set(TAPEIN_ATVREMOTE "" CACHE FILEPATH "Path to pyatv's atvremote for the integration test")
 set(TAPEIN_SANITIZE "" CACHE STRING "Comma-separated sanitizers, e.g. address,undefined")
 
+if(TAPEIN_FUZZ)
+    # Coverage instrumentation for every target (core, vendored codec, harness)
+    # so libFuzzer gets feedback from the parsers; the harnesses add the
+    # fuzzer runtime at link time (tests/fuzz/CMakeLists.txt).
+    add_compile_options(-fsanitize=fuzzer-no-link)
+endif()
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CompilerWarnings)
 include(Sanitizers)

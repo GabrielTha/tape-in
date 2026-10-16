@@ -97,6 +97,10 @@ Result<AlacDecoder> AlacDecoder::create(const AlacConfig& config)
     if (config.framesPerPacket < 1 || config.framesPerPacket > kMaxFramesPerPacket) {
         return makeError(ErrorCode::unsupported, "frames per packet out of range");
     }
+    if (config.kb > 31) {
+        // ag_dec.c computes (1u << kb) - 1 from the cookie.
+        return makeError(ErrorCode::unsupported, "ALAC kb parameter out of range");
+    }
     AlacDecoder d(config);
     auto cookie = config.magicCookie();
     const int32_t status = d.m_impl->decoder.Init(cookie.data(), static_cast<uint32_t>(cookie.size()));

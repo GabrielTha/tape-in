@@ -193,6 +193,28 @@ TEST_CASE("flushBefore drops older timestamps and keeps newer")
     REQUIRE(c.blocks[2].seq == 5);
 }
 
+TEST_CASE("flush beyond everything neither requests resends nor fills silence on resume")
+{
+    JitterBuffer jb;
+    for (uint16_t s = 0; s < 6; ++s) {
+        REQUIRE(jb.insert(s, s * 352u, pcmFor(s), t0));
+    }
+    jb.flushBefore(100 * 352u); // iOS pause: flush to a point past everything buffered
+    REQUIRE(jb.pendingPackets() == 0);
+    REQUIRE(jb.dueResendRequests(t0 + 1s, 100ms, 250ms).empty());
+    Collector none;
+    jb.release(0, t0 + 1s, std::ref(none));
+    REQUIRE(none.blocks.empty());
+
+    // Resume at an arbitrary sequence: exactly that packet comes out, no silence fill before it.
+    REQUIRE(jb.insert(50, 50 * 352u, pcmFor(50), t0 + 2s));
+    Collector c;
+    jb.release(0, t0 + 2s, std::ref(c));
+    REQUIRE(c.blocks.size() == 1);
+    REQUIRE(c.blocks[0].seq == 50);
+    REQUIRE_FALSE(c.blocks[0].wasMissing);
+}
+
 TEST_CASE("reset forgets everything")
 {
     JitterBuffer jb;

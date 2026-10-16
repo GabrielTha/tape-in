@@ -29,6 +29,9 @@ struct SessionStats {
     uint64_t packetsMissing = 0; ///< released as silence
     uint64_t resendRequestsSent = 0;
     uint64_t decodeErrors = 0;
+    uint64_t packetsRejected = 0; ///< sequence behind the release point or too far ahead
+    uint64_t resyncs = 0; ///< jitter buffer restarted after a sequence jump
+    uint64_t datagramsFromStrangers = 0; ///< dropped: source address differs from the sender
     uint64_t framesDelivered = 0;
     uint64_t timingRepliesReceived = 0;
     uint32_t senderLatencyFrames = 0; ///< from the last sync packet

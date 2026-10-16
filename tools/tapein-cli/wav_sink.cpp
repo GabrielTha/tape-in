@@ -56,8 +56,9 @@ void WavSink::onSessionStarted(const core::session::SessionInfo& info)
     m_writers.emplace(info.id, std::move(writer.value()));
     m_files.push_back(path);
     if (m_log) {
-        m_log("session " + std::to_string(info.id) + " started: '" + client + "' (" + info.userAgent + ", "
-              + (info.encrypted ? "encrypted" : "clear") + ", " + (info.pcm ? "L16" : "ALAC") + ") -> " + path.string());
+        m_log("session " + std::to_string(info.id) + " started: '" + client + "' from " + info.peer.toString() + " ("
+              + info.userAgent + ", " + (info.encrypted ? "encrypted" : "clear") + ", " + (info.pcm ? "L16" : "ALAC")
+              + ") -> " + path.string());
     }
 }
 
@@ -93,7 +94,9 @@ void WavSink::onSessionEnded(uint64_t sessionId, std::string_view reason, const 
               + std::to_string(frames) + " frames (" + std::to_string(frames / 44100) + " s), packets "
               + std::to_string(stats.packetsReceived) + ", resends " + std::to_string(stats.resendRepliesReceived)
               + "/" + std::to_string(stats.resendRequestsSent) + ", missing " + std::to_string(stats.packetsMissing)
-              + ", decode errors " + std::to_string(stats.decodeErrors) + ", sender latency "
+              + ", decode errors " + std::to_string(stats.decodeErrors) + ", rejected "
+              + std::to_string(stats.packetsRejected) + ", resyncs " + std::to_string(stats.resyncs)
+              + ", strangers " + std::to_string(stats.datagramsFromStrangers) + ", sender latency "
               + std::to_string(stats.senderLatencyFrames) + " frames");
     }
 }

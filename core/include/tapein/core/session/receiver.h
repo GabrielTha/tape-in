@@ -14,6 +14,7 @@
 #include "tapein/core/session/session.h"
 #include "tapein/core/util/result.h"
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -29,6 +30,9 @@ struct ReceiverConfig {
     net::Endpoint bindAddress; ///< default: 0.0.0.0, port 0 (dynamic)
     bool alsoBindIpv6 = true; ///< try [::] on the same port
     size_t maxSessions = 100;
+    size_t maxConnections = 400; ///< RTSP TCP connections; beyond this, accept() closes immediately
+    std::chrono::milliseconds inactivityTimeout{120000}; ///< no audio and no RTSP on the session → end it
+    std::chrono::milliseconds setupTimeout{10000}; ///< ANNOUNCE without RECORD within this → end it
     uint16_t holdBackPackets = 63; ///< ≈ 500 ms at 352 frames
     std::string sourceUrl = "https://github.com/tapein/tapein";
     std::string txtEt = "0,1"; ///< experiment hook: "0" advertises no encryption
@@ -75,6 +79,8 @@ private:
 
     Session* findSession(uint64_t id) noexcept;
     void endSession(uint64_t id, std::string_view reason);
+    /// A session ended on its own (inactivity, setup timeout): drop its connections.
+    void onSessionSelfEnded(uint64_t id);
     void scheduleCleanup();
     void cleanup();
     void log(std::string message) const;

@@ -164,10 +164,11 @@ TEST_CASE("rejects more than 64 headers")
     REQUIRE(r.error().code == ErrorCode::tooLarge);
 }
 
-TEST_CASE("rejects Content-Length over 4 MiB")
+TEST_CASE("rejects Content-Length over 1 MiB")
 {
+    REQUIRE(kMaxBodyBytes == 1024u * 1024u);
     Parser p;
-    const auto r = p.feed(bytesOf("SET_PARAMETER * RTSP/1.0\r\nContent-Length: 4194305\r\n\r\n"));
+    const auto r = p.feed(bytesOf("SET_PARAMETER * RTSP/1.0\r\nContent-Length: 1048577\r\n\r\n"));
     REQUIRE_FALSE(r.ok());
     REQUIRE(r.error().code == ErrorCode::tooLarge);
 }

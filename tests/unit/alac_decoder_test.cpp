@@ -10,6 +10,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <numbers>
 #include <random>
 #include <vector>
 
@@ -24,8 +25,8 @@ std::vector<int16_t> makeStereoTone(uint32_t frames)
     std::vector<int16_t> pcm(static_cast<size_t>(frames) * 2);
     for (uint32_t i = 0; i < frames; ++i) {
         const double t = static_cast<double>(i) / 44100.0;
-        pcm[i * 2] = static_cast<int16_t>(12000.0 * std::sin(2.0 * M_PI * 440.0 * t));
-        pcm[i * 2 + 1] = static_cast<int16_t>(9000.0 * std::sin(2.0 * M_PI * 660.0 * t) + 300.0 * std::sin(2.0 * M_PI * 3000.0 * t));
+        pcm[i * 2] = static_cast<int16_t>(12000.0 * std::sin(2.0 * std::numbers::pi * 440.0 * t));
+        pcm[i * 2 + 1] = static_cast<int16_t>(9000.0 * std::sin(2.0 * std::numbers::pi * 660.0 * t) + 300.0 * std::sin(2.0 * std::numbers::pi * 3000.0 * t));
     }
     return pcm;
 }
@@ -183,4 +184,10 @@ TEST_CASE("config with unsupported parameters is rejected")
     c = AlacConfig::fromFmtp(kFmtp);
     c.framesPerPacket = 0;
     REQUIRE_FALSE(AlacDecoder::create(c).ok());
+    c = AlacConfig::fromFmtp(kFmtp);
+    c.kb = 32; // used as a shift count in ag_dec.c
+    REQUIRE_FALSE(AlacDecoder::create(c).ok());
+    c = AlacConfig::fromFmtp(kFmtp);
+    c.kb = 31;
+    REQUIRE(AlacDecoder::create(c).ok());
 }

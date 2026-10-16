@@ -92,6 +92,7 @@ SockLen toSockaddr(const Endpoint& ep, sockaddr_storage& out) noexcept
         auto* a = reinterpret_cast<sockaddr_in6*>(&out);
         a->sin6_family = AF_INET6;
         a->sin6_port = htons(ep.port);
+        a->sin6_scope_id = ep.scopeId;
         std::memcpy(&a->sin6_addr, ep.address.data(), 16);
         return sizeof(sockaddr_in6);
     }
@@ -109,6 +110,7 @@ Endpoint fromSockaddr(const sockaddr_storage& in) noexcept
         const auto* a = reinterpret_cast<const sockaddr_in6*>(&in);
         ep.isV6 = true;
         ep.port = ntohs(a->sin6_port);
+        ep.scopeId = a->sin6_scope_id;
         std::memcpy(ep.address.data(), &a->sin6_addr, 16);
     } else {
         const auto* a = reinterpret_cast<const sockaddr_in*>(&in);
@@ -294,12 +296,25 @@ void TcpSocket::setKeepAlive(std::chrono::seconds idle) noexcept
     int on = 1;
     ::setsockopt(static_cast<SockHandle>(m_handle), SOL_SOCKET, SO_KEEPALIVE, reinterpret_cast<const char*>(&on), sizeof on);
     const int idleSeconds = static_cast<int>(idle.count());
-#if defined(TCP_KEEPALIVE) // macOS
-    ::setsockopt(static_cast<SockHandle>(m_handle), IPPROTO_TCP, TCP_KEEPALIVE, &idleSeconds, sizeof idleSeconds);
-#elif defined(TCP_KEEPIDLE) // Linux
-    ::setsockopt(static_cast<SockHandle>(m_handle), IPPROTO_TCP, TCP_KEEPIDLE, &idleSeconds, sizeof idleSeconds);
+    const int intervalSeconds = 5;
+    const int probes = 6; // a vanished peer is detected ~idle + 30 s later
+    const auto* idlePtr = reinterpret_cast<const char*>(&idleSeconds);
+    const auto* intervalPtr = reinterpret_cast<const char*>(&intervalSeconds);
+    const auto* probesPtr = reinterpret_cast<const char*>(&probes);
+#if defined(TCP_KEEPALIVE) && defined(__APPLE__)
+    ::setsockopt(static_cast<SockHandle>(m_handle), IPPROTO_TCP, TCP_KEEPALIVE, idlePtr, sizeof idleSeconds);
+#elif defined(TCP_KEEPIDLE)
+    ::setsockopt(static_cast<SockHandle>(m_handle), IPPROTO_TCP, TCP_KEEPIDLE, idlePtr, sizeof idleSeconds);
+#endif
+#if defined(TCP_KEEPINTVL)
+    ::setsockopt(static_cast<SockHandle>(m_handle), IPPROTO_TCP, TCP_KEEPINTVL, intervalPtr, sizeof intervalSeconds);
 #else
-    (void)idleSeconds;
+    (void)intervalPtr;
+#endif
+#if defined(TCP_KEEPCNT)
+    ::setsockopt(static_cast<SockHandle>(m_handle), IPPROTO_TCP, TCP_KEEPCNT, probesPtr, sizeof probes);
+#else
+    (void)probesPtr;
 #endif
 }
 

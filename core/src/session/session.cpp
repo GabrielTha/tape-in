@@ -41,6 +41,8 @@ Session::Session(net::Reactor& reactor, SessionInfo info, const rtsp::AnnouncePa
             m_log("ALAC decoder unavailable: " + decoder.error().message);
         }
     }
+    m_lastActivityAt = std::chrono::steady_clock::now();
+    m_setupTimer = m_reactor.addTimer(m_config.setupTimeout, [this] { onSetupTimeout(); }, false);
 }
 
 Session::~Session()
@@ -93,7 +95,11 @@ void Session::record()
         return;
     }
     m_started = true;
-    m_lastAudioAt = std::chrono::steady_clock::now();
+    if (m_setupTimer != 0) {
+        m_reactor.cancelTimer(m_setupTimer);
+        m_setupTimer = 0;
+    }
+    m_lastActivityAt = std::chrono::steady_clock::now();
     m_sink.onSessionStarted(m_info);
     m_releaseTimer = m_reactor.addTimer(m_config.releaseInterval, [this] { onReleaseTick(); }, true);
     m_inactivityTimer = m_reactor.addTimer(std::chrono::seconds{1}, [this] { onInactivityTick(); }, true);
@@ -126,6 +132,9 @@ void Session::end(std::string_view reason)
     if (m_inactivityTimer != 0) {
         m_reactor.cancelTimer(m_inactivityTimer);
     }
+    if (m_setupTimer != 0) {
+        m_reactor.cancelTimer(m_setupTimer);
+    }
     if (m_setUp) {
         m_reactor.remove(m_audioSocket.handle());
         m_reactor.remove(m_controlSocket.handle());
@@ -155,6 +164,13 @@ void Session::drain(net::UdpSocket& socket, uint8_t socketKind,
             return;
         }
         const std::span<const uint8_t> datagram(m_datagram.data(), r.value().first);
+        // Only the sender we negotiated with may feed this session.
+        const net::Endpoint& from = r.value().second;
+        if (from.isV6 != m_info.peer.isV6 || from.addressBytes().size() != m_info.peer.addressBytes().size()
+            || !std::equal(from.addressBytes().begin(), from.addressBytes().end(), m_info.peer.addressBytes().begin())) {
+            ++m_stats.datagramsFromStrangers;
+            continue;
+        }
         if (m_config.captureRtp) {
             m_config.captureRtp(m_info.id, socketKind, datagram);
         }
@@ -214,7 +230,7 @@ void Session::handleAudio(const rtp::AudioPacket& packet)
     if (!m_started) {
         return;
     }
-    m_lastAudioAt = std::chrono::steady_clock::now();
+    m_lastActivityAt = std::chrono::steady_clock::now();
     ++m_stats.packetsReceived;
     if (packet.isResend) {
         ++m_stats.resendRepliesReceived;
@@ -260,7 +276,23 @@ void Session::handleAudio(const rtp::AudioPacket& packet)
         }
     }
 
-    m_jitter.insert(packet.seq, packet.rtpTimestamp, m_pcmScratch, m_lastAudioAt);
+    if (m_jitter.insert(packet.seq, packet.rtpTimestamp, m_pcmScratch, m_lastActivityAt)) {
+        m_consecutiveRejections = 0;
+        return;
+    }
+    ++m_stats.packetsRejected;
+    if (++m_consecutiveRejections >= m_config.resyncAfterRejections) {
+        // The sender's sequence is nowhere near ours (restart, or a stray
+        // first packet set the release point): start over from this packet.
+        m_consecutiveRejections = 0;
+        ++m_stats.resyncs;
+        m_jitter.release(0, m_lastActivityAt, [this](const buffer::ReleasedBlock& b) { releaseBlock(b); });
+        m_jitter.reset();
+        (void)m_jitter.insert(packet.seq, packet.rtpTimestamp, m_pcmScratch, m_lastActivityAt);
+        if (m_log) {
+            m_log("session " + std::to_string(m_info.id) + " resynchronised at sequence " + std::to_string(packet.seq));
+        }
+    }
 }
 
 // ------------------------------------------------------------------- timers
@@ -307,8 +339,25 @@ void Session::onInactivityTick()
     if (!m_started || m_ended) {
         return;
     }
-    if (std::chrono::steady_clock::now() - m_lastAudioAt > m_config.inactivityTimeout) {
-        end("no audio for " + std::to_string(m_config.inactivityTimeout.count()) + " s");
+    if (std::chrono::steady_clock::now() - m_lastActivityAt > m_config.inactivityTimeout) {
+        endSelf("inactive for " + std::to_string(m_config.inactivityTimeout.count() / 1000) + " s");
+    }
+}
+
+void Session::onSetupTimeout()
+{
+    m_setupTimer = 0;
+    if (m_started || m_ended) {
+        return;
+    }
+    endSelf("no RECORD within " + std::to_string(m_config.setupTimeout.count() / 1000) + " s");
+}
+
+void Session::endSelf(std::string_view reason)
+{
+    end(reason);
+    if (m_config.onSelfEnded) {
+        m_config.onSelfEnded(m_info.id);
     }
 }
 

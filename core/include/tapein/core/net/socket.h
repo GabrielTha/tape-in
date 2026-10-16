@@ -29,6 +29,7 @@ struct Endpoint {
     std::array<uint8_t, 16> address{};
     bool isV6 = false;
     uint16_t port = 0;
+    uint32_t scopeId = 0; ///< IPv6 link-local zone (sin6_scope_id); 0 otherwise
 
     [[nodiscard]] std::span<const uint8_t> addressBytes() const noexcept
     {

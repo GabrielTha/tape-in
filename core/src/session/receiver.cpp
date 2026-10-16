@@ -227,6 +227,17 @@ void Receiver::endSession(uint64_t id, std::string_view reason)
     }
 }
 
+void Receiver::onSessionSelfEnded(uint64_t id)
+{
+    for (auto& c : m_connections) {
+        if (c->sessionId == id) {
+            c->sessionId = 0;
+            c->close("session ended");
+        }
+    }
+    scheduleCleanup();
+}
+
 void Receiver::scheduleCleanup()
 {
     if (m_cleanupScheduled) {
@@ -252,6 +263,10 @@ void Receiver::onAccept(net::TcpListener& listener)
         if (!accepted.ok()) {
             return;
         }
+        if (m_connections.size() >= m_config.maxConnections) {
+            log("connection refused: limit of " + std::to_string(m_config.maxConnections) + " reached");
+            continue; // the accepted socket closes when it goes out of scope
+        }
         accepted.value().setKeepAlive(std::chrono::seconds{20});
         const uint64_t id = m_nextConnectionId++;
         auto conn = std::make_unique<RtspConnection>(
@@ -259,7 +274,8 @@ void Receiver::onAccept(net::TcpListener& listener)
             [this](RtspConnection& c, const rtsp::Request& r) { onRequest(c, r); },
             [this](RtspConnection& c, std::string_view reason) { onConnectionClosed(c, reason); }, m_config.captureRtsp);
         m_reactor.add(conn->handle(), [ptr = conn.get()] { ptr->onReadable(); });
-        log("connection " + std::to_string(id) + " from " + conn->peerEndpoint().map([](const net::Endpoint& e) { return e.toString(); }).value());
+        const auto peer = conn->peerEndpoint();
+        log("connection " + std::to_string(id) + " from " + (peer.ok() ? peer.value().toString() : std::string("<unknown>")));
         m_connections.push_back(std::move(conn));
     }
 }
@@ -308,6 +324,9 @@ rtsp::Response Receiver::makeResponse(const RtspConnection& conn, const rtsp::Re
 void Receiver::onRequest(RtspConnection& conn, const rtsp::Request& request)
 {
     log("conn " + std::to_string(conn.id()) + " <- " + request.method + " " + request.uri);
+    if (Session* live = findSession(conn.sessionId)) {
+        live->noteActivity();
+    }
     if (request.method == "OPTIONS") {
         handleOptions(conn, request);
     } else if (request.method == "ANNOUNCE") {
@@ -404,6 +423,9 @@ void Receiver::handleAnnounce(RtspConnection& conn, const rtsp::Request& request
     SessionConfig sc;
     sc.holdBackPackets = m_config.holdBackPackets;
     sc.captureRtp = m_config.captureRtp;
+    sc.inactivityTimeout = m_config.inactivityTimeout;
+    sc.setupTimeout = m_config.setupTimeout;
+    sc.onSelfEnded = [this](uint64_t id) { onSessionSelfEnded(id); };
     auto session = std::make_unique<Session>(m_reactor, info, params.value(), aesKey, m_sink, sc,
                                              [this](std::string m) { log(std::move(m)); });
     conn.sessionId = info.id;
@@ -451,7 +473,7 @@ void Receiver::handleSetup(RtspConnection& conn, const rtsp::Request& request)
 void Receiver::handleRecord(RtspConnection& conn, const rtsp::Request& request)
 {
     Session* session = findSession(conn.sessionId);
-    if (session == nullptr) {
+    if (session == nullptr || !session->isSetUp()) {
         conn.send(makeResponse(conn, request, 455));
         return;
     }

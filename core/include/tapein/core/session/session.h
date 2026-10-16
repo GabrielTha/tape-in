@@ -30,10 +30,20 @@ struct SessionConfig {
     std::chrono::milliseconds releaseInterval{10};
     std::chrono::milliseconds resendFirstAfter{100};
     std::chrono::milliseconds resendRepeatEvery{250};
-    std::chrono::seconds inactivityTimeout{30};
+    /// Ends the session when neither audio nor RTSP activity was seen for
+    /// this long (a paused sender keeps its RTSP connection alive).
+    std::chrono::milliseconds inactivityTimeout{120000};
+    /// Ends a session that was announced but never reached RECORD.
+    std::chrono::milliseconds setupTimeout{10000};
+    /// After this many consecutive rejected packets (sequence far from the
+    /// release point) the jitter buffer resynchronises on the next packet.
+    int resyncAfterRejections = 8;
     /// Optional tap for every received datagram: socketKind 0 = audio,
     /// 1 = control, 2 = timing.
     std::function<void(uint64_t sessionId, uint8_t socketKind, std::span<const uint8_t>)> captureRtp;
+    /// Called when the session ended on its own (timeouts), after the sink
+    /// was told; the owner should drop the session's RTSP connection.
+    std::function<void(uint64_t sessionId)> onSelfEnded;
 };
 
 /// One audio stream: three UDP sockets, decryption, decoding, the jitter
@@ -60,6 +70,10 @@ public:
     /// inactivity timers. Idempotent.
     void record();
     [[nodiscard]] bool started() const noexcept { return m_started; }
+    [[nodiscard]] bool isSetUp() const noexcept { return m_setUp; }
+
+    /// RTSP traffic on the owning connection counts as activity.
+    void noteActivity() noexcept { m_lastActivityAt = std::chrono::steady_clock::now(); }
 
     /// FLUSH: drops buffered audio before rtpTimestamp.
     void flush(uint32_t rtpTimestamp);
@@ -83,6 +97,8 @@ private:
     void onReleaseTick();
     void sendTimingRequest();
     void onInactivityTick();
+    void onSetupTimeout();
+    void endSelf(std::string_view reason);
     void releaseBlock(const buffer::ReleasedBlock& block);
     void drain(net::UdpSocket& socket, uint8_t socketKind,
                void (Session::*handler)(std::span<const uint8_t>, const net::Endpoint&));
@@ -116,9 +132,11 @@ private:
     net::Reactor::TimerId m_releaseTimer = 0;
     net::Reactor::TimerId m_timingTimer = 0;
     net::Reactor::TimerId m_inactivityTimer = 0;
+    net::Reactor::TimerId m_setupTimer = 0;
     int m_timingRequestsSent = 0;
     uint16_t m_resendRequestSeq = 0;
-    std::chrono::steady_clock::time_point m_lastAudioAt{};
+    int m_consecutiveRejections = 0;
+    std::chrono::steady_clock::time_point m_lastActivityAt{};
 
     SessionStats m_stats;
     float m_volumeDb = 0.0f;

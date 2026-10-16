@@ -46,6 +46,6 @@ struct Response {
 
 inline constexpr size_t kMaxHeaderBlockBytes = 16 * 1024;
 inline constexpr size_t kMaxHeaders = 64;
-inline constexpr size_t kMaxBodyBytes = 4u * 1024 * 1024;
+inline constexpr size_t kMaxBodyBytes = 1024u * 1024; // artwork bodies are a few hundred KB
 
 } // namespace tapein::core::rtsp

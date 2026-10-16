@@ -36,7 +36,8 @@ capture writer.
 | pyatv end-to-end (clear PCM) | 12–15 s streamed over loopback, **0 differing samples** after marker alignment; in CTest and CI |
 | cliraop end-to-end (clear PCM, encrypted PCM, encrypted ALAC) | all three **0 differing samples**; the full iTunes-style RSA + AES + ALAC path works |
 | Bonjour | `dns-sd -B _raop._tcp` lists `<HWID>@<name>`; `dns-sd -L` shows the auxCord-identical TXT record on a dynamic port, next to the built-in macOS receiver |
-| CI (`.github/workflows/ci.yml`) | macOS universal + ASan/UBSan + pyatv; Linux gcc/clang ASan/UBSan + TSan + pyatv + 60 s libFuzzer per harness; Windows MSVC ASan (core, platform null, tools, unit tests). **Not yet exercised: the repository has no remote.** |
+| CI (`.github/workflows/ci.yml`) | macOS universal + ASan/UBSan + pyatv; Linux gcc/clang ASan/UBSan + TSan + pyatv + 60 s libFuzzer per harness (whole-program coverage); Windows MSVC ASan. **Never run: the repository has no remote.** The Windows paths have only been read, not compiled; two MSVC issues found in review were fixed blind. |
+| Independent review | A fresh reviewer read the whole branch: 1 Critical (remote crash via `getpeername` failure on a reset connection) and 10 Important findings, all fixed with tests; see the ledger and the "Decisions" section. |
 
 ### Fuzzing findings in Apple's ALAC decoder
 
@@ -73,19 +74,25 @@ mkdir -p ~/Desktop/tapein-captures
    `session N started` with the client name; Ctrl-C after a while prints the
    file name. Open the WAV in any player.
 2. **Ten minutes without dropouts.** Play a 10-minute track, then Ctrl-C.
-   The summary line shows `packets`, `resends a/b`, `missing` and `decode
-   errors`. Acceptance: `missing 0` and `decode errors 0`; a few resends are
-   normal on Wi‑Fi. The WAV length should be within a packet of the play
-   time.
-3. **Two phones.** Pick "Tape In Dev" on a second iPhone while the first
-   plays. Each gets its own `session` line and its own WAV.
-4. **Verbose.** Add `--verbose` to see every RTSP request, the
+   The summary line shows `packets`, `resends a/b`, `missing`, `decode
+   errors`, `rejected`, `resyncs` and `strangers`. Acceptance: `missing 0`,
+   `decode errors 0`, `resyncs 0`; a few resends are normal on Wi‑Fi. The
+   WAV length should be within a packet of the play time.
+3. **Pause and resume.** Pause the phone for one minute, resume, play a bit,
+   then lock the phone for two minutes and unlock. The session must survive
+   both (no `session ended` line until you stop or the phone disconnects),
+   and `resends` must not climb while paused.
+4. **Two phones.** Pick "Tape In Dev" on a second iPhone while the first
+   plays. Each gets its own `session` line and its own WAV. The `started`
+   line prints the phone's address: note whether it is IPv4 or IPv6
+   (`fe80::…`), the IPv6 path has not been exercised yet.
+5. **Verbose.** Add `--verbose` to see every RTSP request, the
    Apple-Challenge inputs and our response.
-5. **Capture for the test corpus** (useful, not required): add
+6. **Capture for the test corpus** (useful, not required): add
    `--capture ~/Desktop/tapein-captures/cap` and play 20 s of music; send
    me the `cap/` folder. The RTSP log contains no secrets beyond the session
    AES key wrapped with the public key.
-6. **The `et=0` experiment** (one afternoon, see ARCHITECTURE §10). Run each
+7. **The `et=0` experiment** (one afternoon, see ARCHITECTURE §10). Run each
    of these and check whether the iPhone lists the receiver and what happens
    when you pick it:
    ```sh
@@ -108,6 +115,13 @@ dns-sd -L "<HWID>@Tape In Dev" _raop._tcp local.          # TXT record and port
 - **Sender clock not used for playout.** Timing requests are sent and
   replies counted, but Phase 1 writes frames as they are released; the
   drift controller comes with the audio device in Phase 2.
+- **Session watchdog.** A session ends after 120 s with neither audio nor
+  RTSP traffic (a paused phone keeps sending RTSP), and an announced
+  session that never reaches RECORD is dropped after 10 s. Datagrams from
+  any address other than the sender's are ignored and counted.
+- **IPv6 link-local** is carried (scope id) but untested against a real
+  phone; if the iPhone connects over `fe80::` and SETUP fails, run with
+  the receiver bound to IPv4 only (not yet a flag; tell me).
 - **L16 last packet.** pyatv/cliraop send a short final packet; it is
   zero-padded to 352 frames, so a received WAV can end with up to 7 ms of
   silence.

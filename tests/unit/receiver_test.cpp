@@ -692,6 +692,115 @@ TEST_CASE("capture callbacks see RTSP bytes both ways and RTP datagrams")
     REQUIRE(rtsp[1].second.starts_with("RTSP/1.0 200"));
 }
 
+#ifndef _WIN32
+#include <sys/socket.h>
+TEST_CASE("a peer that resets before accept cannot crash the receiver")
+{
+    Fixture fx;
+    {
+        auto c = net::TcpSocket::connect(loopback(fx.receiver->rtspPort()));
+        REQUIRE(c.ok());
+        // SO_LINGER{1,0}: close sends RST; the receiver may then accept a socket on which getpeername fails.
+        linger l{1, 0};
+        ::setsockopt(c.value().handle(), SOL_SOCKET, SO_LINGER, &l, sizeof l);
+        c.value().close();
+    }
+    fx.pump(100ms);
+    Client d(fx);
+    REQUIRE(d.request("OPTIONS", "", "", "*").status == 200);
+}
+#endif
+
+TEST_CASE("RTSP activity keeps a paused session alive; silence on both ends it and closes the connection")
+{
+    Fixture fx(1);
+    fx.receiver->stop();
+    fx.config.inactivityTimeout = 400ms;
+    fx.receiver = std::make_unique<Receiver>(fx.reactor, fx.config, fx.sink, fx.advertiser, fx.key);
+    REQUIRE(fx.receiver->start().ok());
+    Client c(fx);
+    REQUIRE(c.startStream(true).status == 200);
+    // Paused phone: no audio, but RTSP keepalives.
+    for (int i = 0; i < 8; ++i) {
+        fx.pump(100ms);
+        REQUIRE(c.request("OPTIONS", "", "", "*").status == 200);
+    }
+    REQUIRE(fx.receiver->sessionCount() == 1);
+    // Phone gone: nothing at all.
+    REQUIRE(fx.pumpUntil([&] { return fx.receiver->sessionCount() == 0; }, 2000ms));
+    REQUIRE(fx.sink.ended.size() == 1);
+    REQUIRE(fx.sink.ended[0].second.find("inactive") != std::string::npos);
+    REQUIRE(fx.pumpUntil([&] { return c.eofSeen(); }));
+}
+
+TEST_CASE("a sequence jump resynchronises instead of wedging the session")
+{
+    Fixture fx(1);
+    Client c(fx);
+    REQUIRE(c.startStream(true).status == 200);
+    const uint64_t id = fx.sink.started[0].id;
+    for (uint16_t s = 0; s < 3; ++s) {
+        c.sendAudio(s, s * kFrames, l16Payload(tone(s)));
+    }
+    REQUIRE(fx.pumpUntil([&] { return fx.sink.blocks[id].size() >= 2; }));
+    // Sender restarts its sequence far away.
+    for (uint16_t s = 30000; s < 30020; ++s) {
+        c.sendAudio(s, s * kFrames, l16Payload(tone(static_cast<uint16_t>(s % 100))));
+    }
+    REQUIRE(fx.pumpUntil([&] {
+        for (const auto& b : fx.sink.blocks[id]) {
+            if (b.seq >= 30000) {
+                return true;
+            }
+        }
+        return false;
+    }));
+    REQUIRE(fx.receiver->sessionStats(id).packetsRejected >= 1);
+}
+
+TEST_CASE("a session that never reaches RECORD expires")
+{
+    Fixture fx(1);
+    fx.receiver->stop();
+    fx.config.setupTimeout = 300ms;
+    fx.receiver = std::make_unique<Receiver>(fx.reactor, fx.config, fx.sink, fx.advertiser, fx.key);
+    REQUIRE(fx.receiver->start().ok());
+    Client c(fx);
+    REQUIRE(c.request("ANNOUNCE", "Content-Type: application/sdp\r\nDACP-ID: " + c.dacpId + "\r\n", c.announceBody(true)).status == 200);
+    REQUIRE(fx.receiver->sessionCount() == 1);
+    REQUIRE(fx.pumpUntil([&] { return fx.receiver->sessionCount() == 0; }, 2000ms));
+    REQUIRE(fx.sink.started.empty()); // never started, so never reported
+    // The stalled connection is dropped; a fresh one works.
+    REQUIRE(fx.pumpUntil([&] { return c.eofSeen(); }));
+    Client d(fx);
+    REQUIRE(d.startStream(true).status == 200);
+    REQUIRE(fx.receiver->sessionCount() == 1);
+}
+
+TEST_CASE("connections beyond the cap are closed immediately")
+{
+    Fixture fx(1);
+    fx.receiver->stop();
+    fx.config.maxConnections = 2;
+    fx.receiver = std::make_unique<Receiver>(fx.reactor, fx.config, fx.sink, fx.advertiser, fx.key);
+    REQUIRE(fx.receiver->start().ok());
+    Client a(fx);
+    Client b(fx);
+    REQUIRE(a.request("OPTIONS", "", "", "*").status == 200);
+    REQUIRE(b.request("OPTIONS", "", "", "*").status == 200);
+    Client c(fx);
+    REQUIRE(fx.pumpUntil([&] { return c.eofSeen(); }));
+    REQUIRE(a.request("OPTIONS", "", "", "*").status == 200);
+}
+
+TEST_CASE("RECORD before SETUP is 455")
+{
+    Fixture fx;
+    Client c(fx);
+    REQUIRE(c.request("ANNOUNCE", "Content-Type: application/sdp\r\n", c.announceBody(true)).status == 200);
+    REQUIRE(c.request("RECORD", "Session: 1\r\n").status == 455);
+}
+
 TEST_CASE("stop ends all sessions and unpublishes")
 {
     Fixture fx(1);

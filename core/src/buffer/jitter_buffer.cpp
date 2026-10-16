@@ -88,7 +88,7 @@ bool JitterBuffer::insert(uint16_t seq, uint32_t rtpTimestamp, std::span<const i
 void JitterBuffer::release(uint16_t holdBackPackets, Clock::time_point now, const ReleaseFn& fn)
 {
     (void)now;
-    if (!m_hasStream) {
+    if (!m_hasStream || seqDiff(m_newestSeq, m_readSeq) < 0) {
         return;
     }
     while (seqDiff(m_newestSeq, m_readSeq) >= static_cast<int32_t>(holdBackPackets)) {
@@ -118,7 +118,7 @@ std::vector<MissingRange> JitterBuffer::dueResendRequests(Clock::time_point now,
                                                           std::chrono::milliseconds repeatEvery)
 {
     std::vector<MissingRange> out;
-    if (!m_hasStream) {
+    if (!m_hasStream || seqDiff(m_newestSeq, m_readSeq) < 0) {
         return out;
     }
     bool inRun = false;
@@ -172,9 +172,20 @@ void JitterBuffer::flushBefore(uint32_t rtpTimestamp) noexcept
             break;
         }
     }
-    m_readSeq = firstKept ? *firstKept : static_cast<uint16_t>(m_newestSeq + 1);
     m_lastReleasedTimestamp = rtpTimestamp - static_cast<uint32_t>(m_framesPerPacket);
     m_hasReleased = true;
+    if (firstKept) {
+        m_readSeq = *firstKept;
+    } else {
+        // Nothing survived (pause / seek past the buffer): forget the
+        // sequence space so the next packet restarts the stream cleanly,
+        // without resend requests for the gap or silence before it.
+        for (auto& s : m_slots) {
+            s = Slot{};
+        }
+        m_hasStream = false;
+        m_filledCount = 0;
+    }
 }
 
 std::optional<uint16_t> JitterBuffer::newestSeq() const noexcept

@@ -11,8 +11,9 @@ add_executable(tapein_tests
     unit/sdp_test.cpp
     unit/crypto_test.cpp
     unit/alac_decoder_test.cpp
+    unit/rtp_packets_test.cpp
 )
-target_link_libraries(tapein_tests PRIVATE tapein::core tapein::warnings Catch2::Catch2WithMain alac::codec)
+target_link_libraries(tapein_tests PRIVATE tapein::core tapein::warnings Catch2::Catch2WithMain alac::encoder)
 
 include(Catch)
 catch_discover_tests(tapein_tests)

@@ -6,6 +6,8 @@ add_executable(tapein_tests
     unit/result_test.cpp
     unit/byte_reader_test.cpp
     unit/base64_test.cpp
+    unit/rtsp_message_test.cpp
+    unit/rtsp_parser_test.cpp
 )
 target_link_libraries(tapein_tests PRIVATE tapein::core tapein::warnings Catch2::Catch2WithMain)
 

@@ -294,6 +294,8 @@ rtsp::Response Receiver::makeResponse(const RtspConnection& conn, const rtsp::Re
                                                                m_config.hardwareId);
                 if (response.ok()) {
                     r.headers.set("Apple-Response", response.value());
+                    log("conn " + std::to_string(conn.id()) + " Apple-Challenge " + std::string(*challenge) + " local "
+                        + local.value().toString() + " hwid " + hexUpper(m_config.hardwareId) + " -> " + response.value());
                 } else {
                     log("Apple-Challenge failed: " + response.error().message);
                 }

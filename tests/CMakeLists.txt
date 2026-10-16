@@ -18,9 +18,11 @@ add_executable(tapein_tests
     unit/reactor_test.cpp
     unit/receiver_test.cpp
     unit/dns_sd_advertiser_test.cpp
+    unit/cli_args_test.cpp
+    unit/wav_sink_test.cpp
 )
-target_link_libraries(tapein_tests PRIVATE tapein::core tapein::platform tapein::warnings Catch2::Catch2WithMain
-    alac::encoder MbedTLS::mbedcrypto)
+target_link_libraries(tapein_tests PRIVATE tapein::core tapein::platform tapein::cli_lib tapein::warnings
+    Catch2::Catch2WithMain alac::encoder MbedTLS::mbedcrypto)
 
 include(Catch)
 catch_discover_tests(tapein_tests)

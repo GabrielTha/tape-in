@@ -12,6 +12,8 @@ add_executable(tapein_tests
     unit/crypto_test.cpp
     unit/alac_decoder_test.cpp
     unit/rtp_packets_test.cpp
+    unit/jitter_buffer_test.cpp
+    unit/wav_writer_test.cpp
 )
 target_link_libraries(tapein_tests PRIVATE tapein::core tapein::warnings Catch2::Catch2WithMain alac::encoder)
 

@@ -14,6 +14,8 @@ add_library(tapein_core STATIC
     src/crypto/aes_cbc.cpp
     src/codec/alac_decoder.cpp
     src/rtp/rtp_packets.cpp
+    src/buffer/jitter_buffer.cpp
+    src/util/wav_writer.cpp
 )
 add_library(tapein::core ALIAS tapein_core)
 

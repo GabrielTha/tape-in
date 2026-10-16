@@ -324,8 +324,12 @@ void Receiver::onRequest(RtspConnection& conn, const rtsp::Request& request)
         handleSetParameter(conn, request);
     } else if (request.method == "GET_PARAMETER") {
         handleGetParameter(conn, request);
-    } else if (request.method == "PAUSE" || request.method == "POST" || request.method == "GET") {
+    } else if (request.method == "PAUSE") {
         conn.send(makeResponse(conn, request, 200));
+    } else if (request.method == "GET" || request.method == "POST") {
+        // AirPlay-2-era probes (/info, /feedback, /fp-setup). A classic
+        // receiver has none of them; a non-200 makes senders fall back.
+        conn.send(makeResponse(conn, request, 404));
     } else {
         conn.send(makeResponse(conn, request, 501));
     }

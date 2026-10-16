@@ -21,6 +21,8 @@ endif()
 option(TAPEIN_BUILD_TESTS "Build unit tests" ON)
 option(TAPEIN_BUILD_TOOLS "Build command-line tools" ON)
 option(TAPEIN_FUZZ "Build libFuzzer harnesses (clang only)" OFF)
+option(TAPEIN_INTEGRATION "Register the pyatv integration test with CTest (needs TAPEIN_ATVREMOTE)" OFF)
+set(TAPEIN_ATVREMOTE "" CACHE FILEPATH "Path to pyatv's atvremote for the integration test")
 set(TAPEIN_SANITIZE "" CACHE STRING "Comma-separated sanitizers, e.g. address,undefined")
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")

@@ -617,6 +617,17 @@ TEST_CASE("unknown method returns 501 and bad SDP returns 456")
     REQUIRE(c.request("ANNOUNCE", "Content-Type: application/sdp\r\n", "a=aesiv:AAEC\r\n").status == 456);
 }
 
+TEST_CASE("GET /info and POST /feedback return 404 so AirPlay-2-style senders fall back to classic")
+{
+    Fixture fx;
+    Client c(fx);
+    // pyatv treats any non-200 on GET /info as "device does not support /info".
+    REQUIRE(c.request("GET", "", "", "/info").status == 404);
+    REQUIRE(c.request("POST", "", "", "/feedback").status == 404);
+    // The connection stays usable afterwards.
+    REQUIRE(c.request("OPTIONS", "", "", "*").status == 200);
+}
+
 TEST_CASE("garbage on TCP closes the connection without crash")
 {
     Fixture fx;

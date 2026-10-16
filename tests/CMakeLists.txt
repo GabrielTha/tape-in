@@ -26,3 +26,14 @@ target_link_libraries(tapein_tests PRIVATE tapein::core tapein::platform tapein:
 
 include(Catch)
 catch_discover_tests(tapein_tests)
+
+if(TAPEIN_INTEGRATION AND TAPEIN_BUILD_TOOLS)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    if(TAPEIN_ATVREMOTE STREQUAL "")
+        message(FATAL_ERROR "TAPEIN_INTEGRATION needs -DTAPEIN_ATVREMOTE=<path to atvremote>")
+    endif()
+    add_test(NAME pyatv_integration
+        COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/integration/pyatv_stream_test.py
+                --cli $<TARGET_FILE:tapein-cli> --atvremote ${TAPEIN_ATVREMOTE} --seconds 15)
+    set_tests_properties(pyatv_integration PROPERTIES TIMEOUT 180 LABELS integration)
+endif()

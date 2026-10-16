@@ -128,6 +128,18 @@ TEST_CASE("oaep unwrap vector")
     REQUIRE(r.value() == fromHex("00112233445566778899aabbccddeeff"));
 }
 
+TEST_CASE("oaep encrypt then decrypt round trip")
+{
+    const auto key = loadKey();
+    const auto plain = fromHex("ffeeddccbbaa99887766554433221100");
+    const auto cipher = key->encryptOaepSha1(plain);
+    REQUIRE(cipher.ok());
+    REQUIRE(cipher.value().size() == 256);
+    const auto back = key->decryptOaepSha1(cipher.value());
+    REQUIRE(back.ok());
+    REQUIRE(back.value() == plain);
+}
+
 TEST_CASE("oaep rejects wrong length and corrupted input")
 {
     const auto key = loadKey();

@@ -18,6 +18,9 @@ add_library(tapein_core STATIC
     src/util/wav_writer.cpp
     src/net/socket.cpp
     src/net/reactor.cpp
+    src/session/rtsp_connection.cpp
+    src/session/session.cpp
+    src/session/receiver.cpp
 )
 add_library(tapein::core ALIAS tapein_core)
 

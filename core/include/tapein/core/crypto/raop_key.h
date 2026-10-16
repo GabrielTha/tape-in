@@ -46,6 +46,9 @@ public:
     /// exactly modulusBytes() long.
     Result<std::vector<uint8_t>> decryptOaepSha1(std::span<const uint8_t> cipher);
 
+    /// The sender-side operation (public key), for tests and test senders.
+    Result<std::vector<uint8_t>> encryptOaepSha1(std::span<const uint8_t> plain);
+
 private:
     RaopRsaKey();
     struct Impl;

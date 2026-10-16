@@ -159,4 +159,24 @@ Result<std::vector<uint8_t>> RaopRsaKey::decryptOaepSha1(std::span<const uint8_t
     return out;
 }
 
+Result<std::vector<uint8_t>> RaopRsaKey::encryptOaepSha1(std::span<const uint8_t> plain)
+{
+    const size_t n = modulusBytes();
+    if (plain.empty() || plain.size() + 42 > n) { // 2*SHA1 + 2 bytes overhead
+        return makeError(ErrorCode::invalidArgument, "RSA-OAEP input too long");
+    }
+    mbedtls_rsa_context* rsa = m_impl->rsa();
+    const int rc = mbedtls_rsa_set_padding(rsa, MBEDTLS_RSA_PKCS_V21, MBEDTLS_MD_SHA1);
+    if (rc != 0) {
+        return makeError(ErrorCode::cryptoFailure, "set padding failed: " + mbedError(rc));
+    }
+    std::vector<uint8_t> out(n);
+    const int erc = mbedtls_rsa_rsaes_oaep_encrypt(rsa, mbedtls_ctr_drbg_random, &m_impl->drbg, nullptr, 0, plain.size(),
+                                                   plain.data(), out.data());
+    if (erc != 0) {
+        return makeError(ErrorCode::cryptoFailure, "RSA-OAEP encrypt failed: " + mbedError(erc));
+    }
+    return out;
+}
+
 } // namespace tapein::core::crypto

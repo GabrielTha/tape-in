@@ -30,6 +30,7 @@ include(Dependencies)
 
 add_subdirectory(third_party/alac)
 add_subdirectory(core)
+add_subdirectory(platform)
 
 if(TAPEIN_BUILD_TESTS)
     enable_testing()

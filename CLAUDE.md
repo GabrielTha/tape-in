@@ -118,5 +118,5 @@ cmake/       toolchain and helper modules.
 
 ## Phase status
 
-- Phase 0 (research and decisions): in progress on `phase-0/research`.
+- Phase 0 (research and decisions): delivered 2026-10-16 on `phase-0/research`; waiting for the maintainer's OK and answers to ARCHITECTURE.md §13.
 - Phases 1–6: not started. See `docs/SPEC.md` §6.

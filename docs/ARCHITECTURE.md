@@ -83,7 +83,37 @@ problem, sessions can be sharded across N reactors without API change.
 The core exposes two surfaces: a **control API** (start/stop receiver,
 rename, list clients, send remote commands, subscribe to events) used from
 the UI thread, and a **render API** (`Mixer::render(float* const* out, int
-frames)`) called from the audio thread. Nothing else crosses threads.
+frames)`) called from the audio thread. The only cross-thread channels are:
+the per-session SpscRings (network → audio), atomics for parameters and
+meters, a lock-free event queue (network → UI), and a self-pipe that lets
+the UI thread or a platform callback (e.g. the network-path monitor, or an
+mDNS backend that runs its own thread) wake the reactor. Control-API calls
+are marshalled onto the network thread through that pipe; nothing in the
+core is called concurrently from two threads.
+
+### Session model
+
+- A **Client** is identified by the `DACP-ID` header (what auxCord does);
+  a client may open several RTSP connections (iOS does, e.g. OPTIONS
+  keepalives on a second socket). A **Session** is one ANNOUNCE → SETUP →
+  RECORD stream; a client has at most one live session. A new ANNOUNCE
+  from the same client replaces its live session: the old one fades out
+  over 20 ms and is torn down, the new one buffers up and starts on its own.
+  The UI row (name, fader, mute, solo, meter) is keyed by client and
+  lingers for 30 s after TEARDOWN/timeout, so a Wi‑Fi blip does not create
+  a new row.
+- A **Receiver** is one advertised `_raop._tcp` name with its own 6-byte ID
+  (derived from the install ID and the receiver index; the Apple-Response
+  binds to it, and iOS keys destinations by the 12-hex prefix). The
+  standalone app exposes one receiver in v1; the engine supports several.
+  Each receiver has a `maxSessions` policy: standalone default 100 (Q6);
+  a v2 plugin receiver is **single-session** (one DAW track = one sender,
+  like auxCord), where a second client replaces the first.
+- Session end: TEARDOWN, RTSP socket EOF/error, TCP keepalive (~60 s), or
+  no audio packets for 30 s while in RECORD.
+- Output device: Tape In **follows** the device's current sample rate and
+  never changes it (a DAW user shares the interface); a rate or device
+  change rebuilds the per-session resamplers off-thread and swaps them.
 
 ---
 
@@ -103,34 +133,62 @@ tail bytes clear) ──► ALAC decode → 352 frames S16 stereo ──► Jitt
                                      gain · mute · solo · meter ──► Mixer ──► device
 ```
 
-- **JitterBuffer**: 1024 slots × 352 frames (≈ 8 s), indexed by 16-bit
-  sequence with wrap-around arithmetic, each slot `{seq, rtptime, state}` with
-  atomic state. Written only by the network thread.
-- **Release task** (network thread, every 10 ms): moves contiguous in-order
-  slots into the ring. A missing slot whose resend window has expired (first
-  request after 100 ms, repeat every 250 ms, give up 100 ms before it is
-  due — the shairport-sync constants) is replaced by silence with a short
-  ramp. This keeps the ring strictly in order and makes the audio thread a
+- **JitterBuffer**: 512 slots × 352 frames (≈ 4.1 s, twice the sender's
+  lead), indexed by 16-bit sequence with wrap-around arithmetic, slot
+  `{seq, rtptime, filled}`. Owned and touched **only** by the network thread;
+  no atomics needed.
+- **Release task** (network thread, every 10 ms): releases slots into the
+  ring strictly in sequence order, but only once they are older than the
+  **hold-back window** `reorderWindow` (default 500 ms) behind the newest
+  received sequence. That window is the time available for resends: a gap
+  is requested after 100 ms, re-requested every 250 ms, and when the gap
+  reaches the release point it is filled with silence (short ramps on both
+  sides). This keeps the ring strictly in order and makes the audio thread a
   pure consumer.
-- **SpscRing**: single producer/single consumer, power-of-two frames, header
+- **SpscRing**: single producer/single consumer, power-of-two frames, S16
+  interleaved stereo (keeps the v2 shared-memory region small), header
   `{magic, version, sampleRate, channels, writePos, readPos, generation,
   heartbeat}` laid out so the same code can run over heap memory (v1) or a
   memory-mapped region (v2 plugin). No pointers inside, offsets only.
-- **Target latency**: taken from the sender's sync packets
-  (`rtptime_now − rtptime_less_latency`, ≈ 77175 + 11025 frames ≈ 2.0 s for
-  iOS), capped to the buffer. Playback for a session starts when the ring
-  holds `target − reorderWindow` frames; `reorderWindow` defaults to 500 ms.
+  Capacity 4 s.
+- **Sender lead and ring target**: the sender's sync packets give its lead
+  `L = rtptime_now − rtptime_less_latency` (≈ 77175 + 11025 frames ≈ 2.0 s
+  for iOS, ≈ 2.25 s for Music on desktop). Because `reorderWindow` of that
+  lead is held in the JitterBuffer, the steady-state ring fill is
+  `target = L − reorderWindow` (≈ 1.5 s by default). Playback for a session
+  starts when the ring first reaches `target`. The target is a per-receiver
+  parameter (see §11).
 - **DriftController**: slow PI loop on the ring fill level (time constant
   ~10 s), output clamped to ±0.2 % around the nominal ratio
-  `deviceRate / 44100`. libsamplerate interpolates ratio changes across each
-  block, so ±0.01 % steps are inaudible. Overrun → ratio up slightly; if fill
-  exceeds target + 1 s, drop to target (resync, with fade). Underrun → fade
-  to silence over 5 ms, hold, fade back in when fill recovers to
-  `target/2`.
-- **Mixer**: float32 sum of all active sessions after per-source gain
-  (RAOP volume −30…0 dB mapped to a curve, −144 = mute), mute, solo; master
-  soft-clip only as a safety; per-source peak/RMS meters published as
-  atomics.
+  `r = deviceRate / 44100` (libsamplerate's `src_ratio`, output over
+  input). Fill above target → the consumer must eat input faster → `r`
+  **down**; fill below target → `r` **up**. libsamplerate interpolates
+  ratio changes across each block, so ±0.01 % steps are inaudible. If fill
+  exceeds `target + 1 s`, skip to target (resync, with fade). Underrun →
+  fade to silence over 5 ms, hold, fade back in when fill recovers to
+  `target / 2`.
+- **Per-source gain** = `senderGain × userGain`. `senderGain` is the RAOP
+  volume the sender sends via SET_PARAMETER (−30…0 dB mapped to a curve,
+  −144 = mute), honoured as the spec requires and updated atomically from
+  the network thread; `userGain` is the local fader in the Tape In UI
+  (default unity, persisted per client). Mute and solo are local. An
+  advanced option "ignore sender volume" (off by default) forces
+  `senderGain = 1` for users who want unity gain into the DAW regardless of
+  the phone's volume rocker (Q13). The remote "source volume" control
+  (Phase 3) is a separate DACP command and does not affect the mixer
+  directly; it is reflected back through SET_PARAMETER.
+- **Mixer**: float32 sum of all active sessions after gain, mute, solo;
+  master soft-clip only as a safety; per-source peak/RMS meters published
+  as atomics. Sessions that have no audio in their ring cost nothing on
+  the audio thread.
+- **Budget** (design assumption, not a marketing number): up to 100
+  *connected* sessions, with ~16 *playing* simultaneously at
+  `SRC_SINC_MEDIUM_QUALITY` well under one core on a 2017 Intel Mac (each
+  stereo sinc stream is a few percent of a core; memory ≈ 1.3 MB per
+  session, allocated when the session is created, never on the audio
+  thread). Quality is selectable (`BEST` for a handful of sources); if a
+  user actually plays dozens of sources, the mixer can be sharded across
+  worker threads without changing the ring layout.
 
 Why buffer-level rather than NTP-locked playout: Tape In's job is to get a
 stable stream into a DAW, not multi-room sync. Holding the buffer level
@@ -150,9 +208,10 @@ Derived from shairport-sync, AirBass and the observed auxCord TXT record.
 sv=false md=0,1,2 pw=false sm=false am=TapeIn,1 vs=130.14`. This is
 byte-for-byte the set auxCord advertises (plus `am`), which is known to work
 with current iOS. The 12-hex prefix is **not** required to be a MAC: it is a
-stable per-install random/hashed ID (auxCord uses one that is not the host's
-MAC) and must match the 6 bytes used in the Apple-Response. The RTSP port is
-dynamic (bind port 0, advertise the result).
+stable per-receiver ID (install ID + receiver index; auxCord uses one that
+is not the host's MAC) and must match the 6 bytes used in the
+Apple-Response. The RTSP port is dynamic (bind port 0, advertise the
+result).
 
 **RTSP** on one TCP connection per sender:
 
@@ -256,7 +315,7 @@ This is what lets the same core feed a plugin's `processBlock` in v2.
 | App framework | JUCE 9.0.4 | AGPLv3 option | 9.0.4 released 2026-10-12; 8.0.16-security same day (security-only). See Q1 |
 | Crypto | Mbed TLS 3.6 LTS (FetchContent, minimal config: bignum, RSA, PK/PEM, AES, SHA-1, MD5) | Apache-2.0 OR GPL-2.0+ | 3.6 LTS supported to Mar 2027; 4.x splits crypto into TF-PSA-Crypto and is not yet worth the churn |
 | ALAC decoder | Apple ALAC reference (`macosforge/alac`) | Apache-2.0 | Repo archived 2020, complete and portable; wrapped with fixed-size buffers and fuzzed. Alternative kept in mind: David Hammerton's decoder as carried by shairport-sync (MIT, ~1k lines) |
-| Resampler | libsamplerate 0.2.2 (`SRC_SINC_BEST_QUALITY`, pull mode) | BSD-2 | `src_process` and the `*_vari_process` paths allocate nothing (verified in `src_sinc.c`; allocations only in `src_new`/`src_clone`). Fallback: zita-resampler `VResampler` (GPL-3) |
+| Resampler | libsamplerate 0.2.2 (`SRC_SINC_MEDIUM_QUALITY` default, `BEST` selectable; pull mode) | BSD-2 | `src_process` and the `*_vari_process` paths allocate nothing (verified in `src_sinc.c`; allocations only in `src_new`/`src_clone`). Fallback: zita-resampler `VResampler` (GPL-3) |
 | mDNS macOS | `dns_sd.h` (system) | Apache-2.0 (mDNSResponder) | Use `DNSServiceRefSockFD` + `kDNSServiceFlagsShareConnection` in the reactor |
 | mDNS Windows | `windns.h` DNS-SD (`DnsServiceRegister/Browse/Resolve`) | system | Windows 10 1809+; responder is the OS DNS Client, no extra firewall rule. Fallback: mjansson/mdns (public domain) |
 | Unit tests | Catch2 v3 | BSL-1.0 | |
@@ -311,10 +370,11 @@ natively on arm64 and under Rosetta for the x86_64 slice.
 
 - The plugin target (`juce_add_plugin`, formats AU + VST3, same repo) links
   only `core/dsp` and `core/buffer` — never `core/net`, `core/rtsp`,
-  `platform/`. It maps the SpscRing from shared memory
-  (`shm_open`/`mmap` on macOS, `CreateFileMapping` on Windows), runs the same
-  Resampler + DriftController in `processBlock`, and shows "Tape In app not
-  running" when the ring's heartbeat is stale.
+  `platform/`. Each plugin instance is one single-session receiver (§1,
+  Session model), so it maps exactly one SpscRing from shared memory
+  (`shm_open`/`mmap` on macOS, `CreateFileMapping` on Windows), runs the
+  same Resampler + DriftController in `processBlock`, and shows "Tape In app
+  not running" when the ring's heartbeat is stale. Mixing stays in the DAW.
 - The standalone app becomes the **broker**: it owns all sockets, Bonjour,
   permissions, and one receiver per plugin instance (each instance = its own
   `_raop._tcp` name, chosen in the plugin UI and persisted in the DAW
@@ -327,10 +387,13 @@ natively on arm64 and under Rosetta for the x86_64 slice.
   code* — the DAW — and the usage/`NSBonjourServices` keys are read from the
   DAW's Info.plist, which we do not control (vendors of in-DAW network
   plugins tell users to "grant the host"). The Application Firewall prompts
-  in the DAW's name too. Logic Pro on Apple Silicon sandboxes plugins
-  (AUHostingService); an AU flagged sandbox-safe is loaded in-process where
-  UDP is denied outright. Even a `kDNSServiceInterfaceIndexLocalOnly`
-  Bonjour registration triggers the prompt (Apple DTS, Aug 2025).
+  in the DAW's name too. Logic Pro on Apple Silicon hosts plugins through
+  AUHostingService with a sandbox, and an Apple forum report (Final Cut
+  Pro, same hosting stack, March 2026) shows a sandbox-safe-flagged AU
+  loaded into the sandboxed host with UDP denied — so what a plugin may do
+  on the network is the host's decision, not ours. Even a
+  `kDNSServiceInterfaceIndexLocalOnly` Bonjour registration triggers the
+  prompt (Apple DTS, Aug 2025).
 - **Corollary that shapes v2:** the broker app must **not** be spawned by
   the plugin, otherwise TN3179's responsible-code rule attributes its
   networking to the DAW again. The app is started by the user, by the login
@@ -358,7 +421,7 @@ natively on arm64 and under Rosetta for the x86_64 slice.
 | Area | Plan | Risk |
 |---|---|---|
 | mDNS | `windns.h` DNS-SD behind `IServiceAdvertiser`/`IServiceBrowser` | API only on Windows 10 1809+; disabled when a Hyper-V virtual switch exists *(reported 2015, re-verify)*; Browse returns names only → always Resolve. Fallback: mjansson/mdns (needs our own UDP 5353 socket + inbound firewall rule) |
-| Firewall | Installer adds inbound rules for the RTSP TCP port range and RTP UDP range on the Private profile; first-run prompt otherwise | Users on "Public" profile networks see nothing; document it (UxPlay's README is the model) |
+| Firewall | Ports are dynamic, so the installer adds a **program-scoped** inbound rule (TCP + UDP, any port, Private profile) for `TapeIn.exe`; first-run prompt otherwise | Users on "Public" profile networks see nothing; document it (UxPlay's README is the model) |
 | Audio | WASAPI shared + exclusive via JUCE; ASIO via JUCE with the GPLv3 ASIO SDK vendored | ASIO SDK dual license is new (Oct 2025) — confirm headers; "ASIO" is a Steinberg trademark, descriptive use only |
 | Crypto / codec / resampler | Same Mbed TLS / ALAC / libsamplerate, MSVC + clang-cl | None expected; CI builds the core on `windows-2025` from Phase 1 |
 | Sender for testing | Apple Music/iTunes for Windows speak classic RAOP | Good: a native AirPlay-1 sender exists on Windows |
@@ -437,9 +500,12 @@ natively on arm64 and under Rosetta for the x86_64 slice.
   `atvremote --manual --protocol raop ... stream_file=`) streams a known WAV
   to the CLI receiver on localhost; compare decoded output sample-by-sample
   after aligning the leading silence. pyatv sends **unencrypted** RAOP
-  (no `rsaaeskey`, no Apple-Challenge), so it covers discovery, RTSP state
-  machine, RTP, timing/control, resends, metadata and volume, but not the
-  RSA/AES path. For that path: philippe44/libraop's `raop_play -e` (license
+  (no `rsaaeskey`, no Apple-Challenge) and announces **PCM**
+  (`a=rtpmap:96 L16/44100/2`, verified in its `rtsp.py`), so it covers
+  discovery, RTSP state machine, RTP, timing/control, resends, metadata and
+  volume, but neither the RSA/AES path nor ALAC decoding. ALAC is covered
+  by unit vectors and by replaying a captured iPhone session (the capture
+  tool is part of Phase 1). For the RSA/AES path: philippe44/libraop's `raop_play -e` (license
   unstated → build in CI as a test tool only, never vendored), with the
   Apple-Challenge and key-unwrap unit tests fed by vectors captured from a
   real iPhone session.
@@ -558,6 +624,11 @@ Ordered by how much the answer changes the work.
     default; 500 ms; ~150 ms). Options: keep it strictly on the roadmap, or
     allow it as an "advanced" setting in Phase 2 behind the default.
     Proposal: Phase 2 advanced setting, documented as best-effort.
+13. **Sender volume.** The spec says to honour the volume the sender sends.
+    The design applies it as `senderGain` on top of your local fader (§2).
+    Is an advanced "ignore sender volume" option (unity gain into the DAW
+    whatever the phone's rocker says) wanted in v1? Proposal: yes, off by
+    default.
 
 ---
 

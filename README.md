@@ -16,10 +16,18 @@ Windows port.
 
 ## Status
 
-**Phase 1 (in progress):** command-line receiver that writes the received
-audio to WAV. No app, no audio output yet. See
-[docs/SPEC.md](docs/SPEC.md) for the plan and
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
+**Phase 1 done (awaiting the maintainer's acceptance tests):**
+`tapein-cli` advertises a receiver, accepts any number of senders and writes
+each session to a WAV file. Verified end to end against pyatv (clear PCM)
+and cliraop (encrypted PCM and ALAC) with sample-exact results. No app, no
+audio output yet; that is Phase 2. See [docs/SPEC.md](docs/SPEC.md) for the
+plan, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and
+[docs/phase-reports/phase-1.md](docs/phase-reports/phase-1.md) for what was
+built and how to test it.
+
+```sh
+./build/tools/tapein-cli --name "Tape In" --out-dir ~/Desktop/captures
+```
 
 ## Building
 

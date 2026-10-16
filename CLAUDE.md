@@ -116,7 +116,24 @@ cmake/       toolchain and helper modules.
   with OpenSSL statically linked, and groups RTSP connections into client
   sessions keyed by DACP-ID.
 
+## Things learned while building (keep)
+
+- Apple's reference ALAC decoder is not safe on hostile input as published:
+  see `third_party/alac/UPSTREAM` for the four validation patches and the
+  `-fwrapv` flag. Never update that vendored copy without re-applying them
+  and re-running the fuzz corpus.
+- pyatv (`atvremote --manual --protocol raop`) sends unencrypted L16 and
+  only takes the classic path when `GET /info` is **not** 200. cliraop
+  (philippe44/libraop, MIT, prebuilt binaries in its `bin/`) does the
+  iTunes-style encrypted PCM/ALAC path; `tests/integration/raop_play_test.sh`.
+- Apple clang has no libFuzzer runtime; `tests/fuzz` harnesses replay the
+  corpus under CTest locally and fuzz for real on the Linux clang CI job.
+- Gate sanitizer runs on the `ctest` exit code, never on grep of its output.
+- Command-line tools launched from Terminal are exempt from the Local
+  Network permission (Apple TN3179); a bundled app is not.
+
 ## Phase status
 
-- Phase 0 (research and decisions): delivered 2026-10-16 on `phase-0/research`; waiting for the maintainer's OK and answers to ARCHITECTURE.md §13.
-- Phases 1–6: not started. See `docs/SPEC.md` §6.
+- Phase 0 (research and decisions): delivered 2026-10-16 on `phase-0/research`; decisions recorded in ARCHITECTURE.md §13.
+- Phase 1 (CLI receiver): built 2026-10-16 on `phase-1/cli-receiver`; report in `docs/phase-reports/phase-1.md`; waiting for the maintainer's iPhone acceptance tests and OK.
+- Phases 2–6: not started. See `docs/SPEC.md` §6.

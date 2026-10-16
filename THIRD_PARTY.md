@@ -8,3 +8,6 @@ and `third_party/`.
 |---|---|---|---|---|
 | Catch2 | v3.16.1 | BSL-1.0 | Unit tests (not shipped) | FetchContent |
 | Mbed TLS | 3.6.7 (release tarball, SHA-256 pinned) | Apache-2.0 OR GPL-2.0-or-later (used under Apache-2.0) | RSA PKCS#1 v1.5 raw signing, RSA-OAEP-SHA1, AES-128-CBC | FetchContent; config in `third_party/mbedtls_config.h` |
+| Apple Lossless Audio Codec (reference) | macosforge/alac @ c38887c | Apache-2.0 | ALAC decoding (shipped); encoder used by tests/tools only | `third_party/alac/`, vendored with four validation patches listed in `UPSTREAM` |
+| pyatv | 0.18.0 | MIT | Integration-test sender (not shipped) | `tests/integration/requirements.txt`, installed into a venv |
+| libraop / cliraop | git HEAD 2026-10 | MIT | Encrypted-path integration sender (not shipped, not vendored) | External binary passed to `tests/integration/raop_play_test.sh` |

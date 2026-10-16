@@ -9,6 +9,7 @@ add_executable(tapein_tests
     unit/rtsp_message_test.cpp
     unit/rtsp_parser_test.cpp
     unit/sdp_test.cpp
+    unit/crypto_test.cpp
 )
 target_link_libraries(tapein_tests PRIVATE tapein::core tapein::warnings Catch2::Catch2WithMain)
 

@@ -9,10 +9,15 @@ add_library(tapein_core STATIC
     src/rtsp/rtsp_message.cpp
     src/rtsp/rtsp_parser.cpp
     src/rtsp/sdp.cpp
+    src/crypto/raop_key.cpp
+    src/crypto/apple_challenge.cpp
+    src/crypto/aes_cbc.cpp
 )
 add_library(tapein::core ALIAS tapein_core)
 
 target_include_directories(tapein_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 target_compile_features(tapein_core PUBLIC cxx_std_20)
-target_link_libraries(tapein_core PRIVATE tapein::warnings)
+target_link_libraries(tapein_core
+    PRIVATE tapein::warnings
+    PRIVATE MbedTLS::mbedcrypto)

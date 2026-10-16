@@ -30,7 +30,8 @@ collected in §13.
 | Sessions | Many concurrent senders; one audio stream per *client* (DACP-ID), no 453 | auxCord parity; protocol has no limit, it is receiver policy | Medium |
 | Clocking | Buffer-level-driven adaptive resampling per source; sender NTP used for diagnostics only in v1 | Keeps latency constant without tying the audio thread to network clocks | Medium-High |
 | Ports | RTSP TCP on a dynamic port; 3 UDP ports per session, dynamic | Coexist with macOS receiver (5000/7000) and auxCord | High |
-| Plugin (v2) | Reader of a transport-neutral SPSC ring; no sockets in the DAW | Local Network permission and firewall are attributed to the DAW, not us | Medium |
+| Plugin (v2) | Reader of a transport-neutral SPSC ring; no sockets in the DAW; app never spawned by the plugin | Local Network permission and firewall are attributed to the DAW (responsible code), not us — confirmed by TN3179 | High |
+| Latency | Sender-sync default (≈ 2 s); buffer target is a per-receiver parameter; shorter "monitoring" mode proposed for roadmap/Phase 2 | Sender-imposed but receiver can play early; main differentiator over auxCord | Medium |
 | Windows audio | WASAPI shared + exclusive baseline; ASIO via JUCE (SDK now GPLv3-or-proprietary) | Steinberg relicensed ASIO SDK in Oct 2025 | High (license), Medium (details) |
 
 ---
@@ -319,13 +320,29 @@ natively on arm64 and under Rosetta for the x86_64 slice.
   `_raop._tcp` name, chosen in the plugin UI and persisted in the DAW
   project). The engine already supports many receivers; v1 only exposes one
   in the UI.
-- Why no networking in the DAW: on macOS 15+ the Local Network prompt is
-  attributed to the *responsible process* — the DAW — and `NSBonjourServices`
-  must be in the DAW's Info.plist, which we do not control; the Application
-  Firewall likewise prompts in the DAW's name; sandboxed hosts (GarageBand,
-  App Store Logic) block raw sockets entirely. *(Observed: auxCord's binary
-  contains both a `PluginProcessor` and the RTSP/DACP classes in one JUCE
-  project, so its plugin likely runs networking in-process; see Q4.)*
+- Why no networking in the DAW (hypothesis **confirmed** by Apple's TN3179
+  and vendor support pages): on macOS 15+ every Bonjour operation and every
+  outgoing unicast UDP to a local address (our timing requests) needs the
+  Local Network permission; the prompt is attributed to the *responsible
+  code* — the DAW — and the usage/`NSBonjourServices` keys are read from the
+  DAW's Info.plist, which we do not control (vendors of in-DAW network
+  plugins tell users to "grant the host"). The Application Firewall prompts
+  in the DAW's name too. Logic Pro on Apple Silicon sandboxes plugins
+  (AUHostingService); an AU flagged sandbox-safe is loaded in-process where
+  UDP is denied outright. Even a `kDNSServiceInterfaceIndexLocalOnly`
+  Bonjour registration triggers the prompt (Apple DTS, Aug 2025).
+- **Corollary that shapes v2:** the broker app must **not** be spawned by
+  the plugin, otherwise TN3179's responsible-code rule attributes its
+  networking to the DAW again. The app is started by the user, by the login
+  item, or by a launchd agent with `AssociatedBundleIdentifiers`; the plugin
+  only rendezvouses with it. Loopback traffic is not "local network" under
+  TN3179's definition, so shared memory plus a loopback control channel
+  prompt nothing. Do not use Bonjour for plugin↔app discovery.
+- *(Observed: auxCord's binary contains a `PluginProcessor` next to the
+  RTSP/DACP classes, its product page says each plugin instance is its own
+  AirPlay destination, and its FAQ gives no permission guidance — so its
+  plugin very likely runs networking inside the DAW and relies on the user
+  granting the host. That is the UX we are avoiding; see Q4.)*
 - Known v2 gotchas the v1 design already accounts for: sample rate and
   buffer size are properties of the consumer (resampler lives on the reader
   side); the ring header carries a generation counter + heartbeat so a
@@ -355,21 +372,40 @@ natively on arm64 and under Rosetta for the x86_64 slice.
 
 1. **The RAOP RSA private key.** Every open-source AirPlay-1 receiver
    (shairport-sync `common.c`, AirBass `PrivateKey.pem`, airplay2-receiver
-   `airplay1.py`, OwnTone, and auxCord *(inferred: it links OpenSSL and
-   answers Apple-Challenge)*) embeds the same 2048-bit private key, obtained
-   from AirPort Express firmware (public since James Laird's 2011 shairport
-   release). It cannot be avoided: iOS sends `Apple-Challenge` and the
-   receiver must sign it regardless of whether audio encryption (`et=1`) is
-   used; shairport-sync answers it on every request and has no path that
-   succeeds without the key. None of the projects comment on provenance or
-   legality in their trees. Tape In needs the key to work with iOS. Options:
-   (a) embed it like everyone else, with a clear note in `docs/LEGAL.md`;
-   (b) load it from a user-supplied file at runtime (still needs the user to
-   obtain it; worse UX, same key). Recommendation: (a). **Decision needed.**
-2. **"AirPlay" trademark.** Product name contains no "AirPlay"; descriptive
-   use ("works with AirPlay") plus the no-affiliation notice in README,
-   About window and DMG. We are not in the MFi program and must not use the
-   "Works with Apple AirPlay" badge.
+   `airplay1.py`, AirPlayWin, ESPHome-AirPlay, and auxCord *(inferred: it
+   links OpenSSL and answers Apple-Challenge)*) embeds the same 2048-bit
+   private key. Provenance: James Laird read it out of an AirPort Express
+   ROM and published it with shairport in April 2011. Since then
+   shairport-sync has shipped it in **Debian main** and **Fedora** for
+   years; no lawsuit, DMCA notice or cease-and-desist against any of these
+   projects or distributions was found in 15 years. Apple's only documented
+   action was in its own channel: pulling Airfoil Speakers Touch from the
+   App Store in 2012 ("without using approved APIs or a proper license").
+   The one project that refuses to bundle the key, shairplay, says "for
+   possible legal reasons" and makes the user supply `airport.key`.
+   It cannot be avoided for iOS: the sender issues `Apple-Challenge` and
+   expects a valid signature regardless of whether audio encryption is on;
+   a receiver advertising only `et=0` was, on the only evidence available
+   (2013), invisible to iOS while visible to iTunes. The RSA-free path that
+   modern iOS does accept is UxPlay's (`et=0,3,5` + FairPlay `fp-setup` +
+   legacy pairing), which replaces the key with a reverse-engineered DRM
+   handshake — a larger legal and engineering surface, not a smaller one.
+   Options: **(a)** embed it, with provenance documented in
+   `docs/LEGAL.md`, same posture as Debian/Fedora/Homebrew; **(b)** load it
+   from a user-supplied file at runtime, shairplay-style (worse UX, same
+   key, arguably cleaner for the repository); **(c)** FairPlay path (no).
+   Recommendation: (a), with the key isolated in one file so switching to
+   (b) is trivial. **Decision needed (Q2).** Phase 1 also runs the cheap
+   `et=0`-only experiment against the maintainer's iPhone to refresh the
+   2013 evidence.
+2. **"AirPlay" trademark.** Apple's third-party guidelines allow referential
+   use ("compatible with AirPlay", "works with AirPlay") when the product is
+   in fact compatible, the mark is not part of the product name, is less
+   prominent than it, and carries the attribution line ("AirPlay is a
+   trademark of Apple Inc., registered in the U.S. and other countries and
+   regions"). No AirPlay icon or logo. The "Works with Apple AirPlay" badge
+   is MFi-licensee-only and must not be used. Tape In's name, README, About
+   window and DMG follow this.
 3. **AGPL §13.** An iPhone streaming to Tape In is arguably "interacting
    through a network". Cheap, defensible compliance: source URL in the About
    window, in the RTSP `Server` header comment, and as a `src=` TXT key.
@@ -397,34 +433,68 @@ natively on arm64 and under Rosetta for the x86_64 slice.
   vectors captured from a real iPhone session; OAEP unwrap vector).
 - **Fuzz (clang CI job)**: libFuzzer harnesses for every parser with a
   corpus seeded from captured sessions.
-- **Integration (macOS CI)**: pyatv streams a known WAV to the CLI receiver
-  on localhost; compare decoded output sample-by-sample after aligning the
-  leading silence. pyatv's RAOP sender is MIT and supports classic RAOP with
-  RSA/AES *(details in the Phase-1 report once exercised)*.
+- **Integration (macOS CI)**: **pyatv** (MIT, `pip install pyatv`,
+  `atvremote --manual --protocol raop ... stream_file=`) streams a known WAV
+  to the CLI receiver on localhost; compare decoded output sample-by-sample
+  after aligning the leading silence. pyatv sends **unencrypted** RAOP
+  (no `rsaaeskey`, no Apple-Challenge), so it covers discovery, RTSP state
+  machine, RTP, timing/control, resends, metadata and volume, but not the
+  RSA/AES path. For that path: philippe44/libraop's `raop_play -e` (license
+  unstated → build in CI as a test tool only, never vendored), with the
+  Apple-Challenge and key-unwrap unit tests fed by vectors captured from a
+  real iPhone session.
 - **Manual matrix (maintainer)**: iPhone (Spotify, Apple Music, YouTube,
   Voice Memos), another Mac (system audio and DAW output), Windows laptop
-  (Apple Music/iTunes for Windows), sinks BlackHole + Focusrite loopback into
-  Ableton Live; sleep/wake, Wi‑Fi switch, output switch, sample-rate change.
+  (**Apple Music for Windows** is a real Apple AirPlay-1 sender; AirMyPC or
+  AirParrot as third-party alternatives), sinks BlackHole + Focusrite
+  loopback into Ableton Live; sleep/wake, Wi‑Fi switch, output switch,
+  sample-rate change.
 - **Compatibility probe (Phase 1, first thing)**: an iOS 26 iPhone picks the
-  CLI receiver in Control Center and audio arrives. This is the empirical
-  answer to "does current iOS still talk AirPlay 1"; the strong prior is
-  yes, because auxCord (RAOP-only) is in daily use on this machine.
+  CLI receiver in Control Center and audio arrives. Prior evidence that the
+  answer is yes: Apple broke classic receivers in iOS 18 betas 1–3 and fixed
+  it in beta 4 (July 2024, treated as a bug); shairport-sync classic mode
+  confirmed with iOS 18.4.1 (May 2025), macOS 26.0.1 (Oct 2025) and
+  iOS/macOS 26.5 (May 2026); a 2004 AirPort Express still streams from an
+  iPhone (Nov 2025); auxCord (RAOP-only) is in daily use on this machine.
+  What classic receivers lost: iOS multi-speaker groups, the Home app, and
+  AirPlay 2's buffered low-latency mode. None of that matters for a DAW
+  input.
+- **`et=0` experiment (Phase 1, one afternoon)**: advertise a receiver with
+  `et=0` only, and separately `et=0,1` without answering Apple-Challenge,
+  and record whether the iPhone lists it and what it sends after OPTIONS.
+  Refreshes the only (2013) evidence on whether the RSA key is avoidable.
+- **Second-sender experiment (Phase 2)**: two iPhones on one receiver;
+  record iOS UI behaviour. There is no protocol-level limit (each session
+  has its own RTSP connection and UDP port triplet); single-sender limits in
+  shairport-sync/UxPlay/AirPlayWin are receiver policy.
 
 ---
 
 ## 11. Latency
 
-The ~2 s is sender-imposed: iOS sends audio ahead by the amount announced
-in its sync packets (≈ 88200 frames incl. the 11025 "fixed latency" bucket)
-and expects the receiver to play at that offset. A receiver can play
-*earlier* than the sender's timestamps (shairport-sync's
-`audio_backend_latency_offset`) but then has less protection against loss
-and resends, and FLUSH/seek behaviour becomes visibly off. Tape In v1 keeps
-the sender's latency and exposes an advanced "latency offset" setting
-(default 0, range −1.5 s…+0.5 s) in Phase 2 for users who prefer earlier
-playback over robustness. Real reductions require AirPlay 2's buffered mode
-or a different protocol; both are out of scope. auxCord documents the same
-limit.
+The ~2 s is sender-imposed and not negotiable over RTSP: the sender's sync
+packets define it (`sync_rtptime − rtptime_less_latency` ≈ 77175 + 11025 =
+88200 frames ≈ 2.0 s for iOS, ≈ 2.25 s for iTunes/Music on desktop); the
+receiver's `Audio-Latency` reply can only *add* delay, `a=min-latency` is
+the sender's own floor, and iOS ignores receiver-reported latency (UxPlay's
+`-al` is documented as non-functional).
+
+But the sender transmits audio ~2 s *before* it is due, and the receiver
+merely holds it. A receiver can therefore play early: shairport-sync has a
+`-L` override and an offset documented to ±250 ms; the practical floor is
+network jitter + resend window + decode + output buffer, i.e. tens of ms on
+a good Wi‑Fi link. Costs: no A/V sync with the sender's screen, less
+tolerance for Wi‑Fi hiccups (resends have less time), and FLUSH/seek must
+discard audio already received past the flush point.
+
+Design consequence: the DriftController's target fill level is a
+per-receiver setting, not a constant. v1 ships with "sender sync" (≈ 2 s,
+auxCord parity, the default). A user-selectable shorter buffer (e.g.
+500 ms / 150 ms "monitoring") is cheap to expose once the pipeline is
+stable; the spec lists a low-latency mode as out of scope for v1, so it is
+proposed for the roadmap as the main differentiator over auxCord (whose
+reviewers call its latency "high"). See Q12. Real sub-50 ms latency would
+need AirPlay 2's buffered mode or a different protocol; out of scope.
 
 ---
 
@@ -432,8 +502,8 @@ limit.
 
 | # | Risk | Impact | Likelihood | Mitigation |
 |---|---|---|---|---|
-| 1 | Apple drops AirPlay 1 from iOS/macOS senders | Fatal for the product | Low in 12 months (auxCord RAOP-only is in daily use on iOS 26-era devices; Apple Music for Windows still needs classic) | Phase-1 probe first; keep the core protocol-agnostic enough that an AirPlay 2 receiver could be added (HomeKit pairing + buffered audio) as a later major effort |
-| 2 | RSA key legal exposure | Project takedown | Low (15 years of public use, no known action) | Maintainer decision (§9.1); document provenance; be ready to move the key to a user-supplied file |
+| 1 | Apple drops AirPlay 1 from iOS/macOS senders | Fatal for the product | Low in 12 months: Apple fixed the iOS 18 beta regression rather than letting it ship; classic confirmed on iOS/macOS 26.5; Apple Music for Windows still speaks classic; auxCord is sold on it today | Phase-1 probe first; keep the core protocol-agnostic enough that an AirPlay 2 receiver could be added (HomeKit pairing + buffered audio) as a later major effort |
+| 2 | RSA key legal exposure | Project takedown | Low (15 years in Debian/Fedora/Homebrew, no known action; Apple's only move was App Store policy in 2012) | Maintainer decision (§9.1); document provenance in `docs/LEGAL.md`; key isolated in one file so it can move to a user-supplied file |
 | 3 | Local Network permission UX on macOS 15+ | Users think the app is broken | High (every install) | Usage strings, in-app detection of `PolicyDenied`, guided link to System Settings, README section |
 | 4 | iOS behaviour with many concurrent sessions is undocumented | Multi-source feature may need redesign | Medium | Design per *client* (DACP-ID) with multiple RTSP connections, as auxCord does; test with 2–3 iPhones in Phase 2 |
 | 5 | Drift/resampling quality (clicks, slow convergence) | Core UX | Medium | Buffer-level PI control with clamped slew; unit-tested step responses; long-run soak tests |
@@ -441,7 +511,7 @@ limit.
 | 7 | Sleep/wake and network changes leave sockets/mDNS stale | Robustness criterion | Medium | Re-register Bonjour and rebind listener on interface change (SCNetworkReachability / `NWPathMonitor` via a small Obj-C++ shim), session timeout via TCP keepalive ≈ 60 s + audio silence timeout |
 | 8 | Windows mDNS API limitations / Hyper-V | Windows port slips | Medium | Fallback mdns library already selected; smoke test on a VM before committing |
 | 9 | Notarization/Gatekeeper and SMAppService signing rules | Distribution delays | Low | Developer ID + hardened runtime + `notarytool` pipeline in Phase 4; note: `notarytool` needs Xcode, which is not installed on the maintainer's Mac |
-| 10 | 2 s latency is not reducible | Users expecting live monitoring | Certain | Document; offset setting; roadmap note on AirPlay 2 |
+| 10 | 2 s default latency disappoints users expecting live monitoring | Perceived quality | Certain at default | Document; "sender sync" default with a shorter-buffer mode on the roadmap (§11, Q12); the buffer level is already a per-receiver parameter in the design |
 | 11 | ASIO SDK relicensing details | Windows ASIO support | Low | WASAPI exclusive is the baseline; ASIO only after reading the vendored SDK's headers |
 
 ---
@@ -458,10 +528,12 @@ Ordered by how much the answer changes the work.
    in one file either way.
 3. **Minimum macOS 13.0** as proposed (§6)? Alternative is 14.0 with no
    technical gain today.
-4. **auxCord's plugin.** Does the auxCord you own include an AU/VST3, and
-   when you use it inside Ableton/Logic, does the DAW (not auxCord) ask for
-   Local Network / firewall permission? That tells us whether Mountainroad
-   put networking inside the plugin, which calibrates the v2 broker design.
+4. **auxCord's plugin.** Its product page lists AU/VST3/AAX and says each
+   plugin instance is its own AirPlay destination, so Mountainroad almost
+   certainly runs networking inside the DAW. If you have the plugin
+   installed somewhere: when you add it in Ableton/Logic, does the DAW ask
+   for Local Network / firewall permission? That confirms the UX we are
+   designing around (§7) and is not blocking.
 5. **Which iOS version is on the iPhone you use with auxCord?** That is our
    current empirical "AirPlay 1 still works" data point; the Phase-1 probe
    will confirm it with our own receiver.
@@ -471,13 +543,21 @@ Ordered by how much the answer changes the work.
    "Tape In (2)"…) or "Tape In on <hostname>"? Proposal: "Tape In".
 8. **AGPL §13 `src=` TXT key and source link in the About window** — OK to
    add?
-9. **Windows test sender.** Do you have Apple Music or iTunes for Windows
-   on the laptop? If not, which AirPlay sender do you use there?
+9. **Windows test sender.** Apple Music for Windows (free) is a real Apple
+   AirPlay-1 sender and the best test; do you have it on the laptop? If
+   not, AirMyPC or AirParrot are the third-party options (TuneBlade's site
+   was unreachable on 2026-10-16).
 10. **Xcode.** Phase 4 (notarization) needs full Xcode for `notarytool` and
     `stapler`; the Mac currently has only the Command Line Tools. Installing
     it is on you (it is a system component); nothing in Phases 1–3 needs it.
 11. **Password-protected receiver (`pw=true`)** — in scope for v1 or not?
     Proposal: not in v1 (auxCord advertises `pw=false`).
+12. **Shorter-buffer ("monitoring") mode.** The spec puts a low-latency mode
+    out of v1 scope, but §11 shows it is receiver-side and cheap once the
+    drift controller exists: a per-receiver buffer target (2 s sender sync
+    default; 500 ms; ~150 ms). Options: keep it strictly on the roadmap, or
+    allow it as an "advanced" setting in Phase 2 behind the default.
+    Proposal: Phase 2 advanced setting, documented as best-effort.
 
 ---
 
@@ -489,5 +569,8 @@ dialogue, decodes to 44.1 kHz/16-bit stereo and writes each session to its
 own WAV (no resampling yet, no audio device). Plus: CMake skeleton, core
 library with parsers + crypto + ALAC + jitter buffer, Catch2 suite, fuzz
 harnesses, GitHub Actions matrix (macOS ASan/UBSan, Linux ASan/UBSan/TSan,
-Windows MSVC ASan), and the pyatv integration test. Acceptance criteria as
-in SPEC.md §6 Phase 1.
+Windows MSVC ASan), the pyatv integration test (unencrypted path) and a
+`raop_play -e` job for the RSA/AES path. Two short experiments with the
+maintainer's iPhone: the `et=0` visibility test (§10) and a capture of one
+real session to seed the crypto test vectors and fuzz corpus. Acceptance
+criteria as in SPEC.md §6 Phase 1.

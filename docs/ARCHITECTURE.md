@@ -1,6 +1,7 @@
 # Tape In — Architecture and Phase-0 decisions
 
-Status: **draft for maintainer review** (Phase 0). Date: 2026-10-16.
+Status: **Phase 0 reviewed**; Q1–Q3 and Q12 decided 2026-10-16, the rest
+follow their proposed defaults unless the maintainer says otherwise.
 Scope and phases are in [SPEC.md](SPEC.md). Conventions are in
 [../CLAUDE.md](../CLAUDE.md).
 
@@ -458,7 +459,7 @@ natively on arm64 and under Rosetta for the x86_64 slice.
    from a user-supplied file at runtime, shairplay-style (worse UX, same
    key, arguably cleaner for the repository); **(c)** FairPlay path (no).
    Recommendation: (a), with the key isolated in one file so switching to
-   (b) is trivial. **Decision needed (Q2).** Phase 1 also runs the cheap
+   (b) is trivial. **Decision (2026-10-16, Q2): (a).** Phase 1 also runs the cheap
    `et=0`-only experiment against the maintainer's iPhone to refresh the
    2013 evidence.
 2. **"AirPlay" trademark.** Apple's third-party guidelines allow referential
@@ -587,13 +588,12 @@ need AirPlay 2's buffered mode or a different protocol; out of scope.
 Ordered by how much the answer changes the work.
 
 1. **JUCE 9 instead of JUCE 8?** JUCE 9.0.4 is current; 8 is security-only
-   since July 2026. I recommend 9. If you prefer 8 for stability, say so
-   and we pin 8.0.16.
+   since July 2026. **Decided 2026-10-16: JUCE 9** (pin 9.0.4).
 2. **Embed the RAOP RSA key** (§9.1, option a)? Without it iOS will not
-   stream. This is your call; the code will be structured so the key lives
-   in one file either way.
-3. **Minimum macOS 13.0** as proposed (§6)? Alternative is 14.0 with no
-   technical gain today.
+   stream. **Decided 2026-10-16: maintainer delegated the call; option (a)**
+   — embed, provenance documented in `docs/LEGAL.md`, key isolated in one
+   file so switching to a user-supplied file stays trivial.
+3. **Minimum macOS 13.0** as proposed (§6)? **Decided 2026-10-16: 13.0.**
 4. **auxCord's plugin.** Its product page lists AU/VST3/AAX and says each
    plugin instance is its own AirPlay destination, so Mountainroad almost
    certainly runs networking inside the DAW. If you have the plugin
@@ -623,7 +623,8 @@ Ordered by how much the answer changes the work.
     drift controller exists: a per-receiver buffer target (2 s sender sync
     default; 500 ms; ~150 ms). Options: keep it strictly on the roadmap, or
     allow it as an "advanced" setting in Phase 2 behind the default.
-    Proposal: Phase 2 advanced setting, documented as best-effort.
+    **Decided 2026-10-16: Phase 2 advanced setting**, documented as
+    best-effort; default stays "sender sync".
 13. **Sender volume.** The spec says to honour the volume the sender sends.
     The design applies it as `senderGain` on top of your local fader (§2).
     Is an advanced "ignore sender volume" option (unity gain into the DAW

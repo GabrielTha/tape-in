@@ -1,0 +1,6 @@
+SETUP rtsp://127.0.0.1/2551211145 RTSP/1.0
+Transport: RTP/AVP/UDP;unicast;interleaved=0-1;mode=record;control_port=57639;timing_port=51871
+CSeq: 2
+User-Agent: iTunes/7.6.2 (Windows; N;)
+Client-Instance: a710400ce6acb95f
+

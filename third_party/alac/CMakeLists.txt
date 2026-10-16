@@ -39,6 +39,13 @@ add_library(alac_decoder STATIC ALACDecoder.cpp ag_dec.c dp_dec.c matrix_dec.c)
 add_library(alac::decoder ALIAS alac_decoder)
 tapein_alac_relax_warnings(alac_decoder)
 target_link_libraries(alac_decoder PUBLIC alac::common)
+if(NOT MSVC)
+    # Malformed packets make the predictor's int32 arithmetic overflow
+    # (dp_dec.c:347, found by fuzzing). With -fwrapv that is defined
+    # two's-complement wraparound: the output is garbage, but bounded, and
+    # the compiler may not assume the overflow never happens.
+    target_compile_options(alac_decoder PRIVATE -fwrapv)
+endif()
 if(_ubsan_on)
     target_compile_options(alac_decoder PRIVATE -fno-sanitize=shift-base)
 endif()

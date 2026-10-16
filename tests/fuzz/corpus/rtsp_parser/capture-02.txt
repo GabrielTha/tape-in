@@ -1,0 +1,8 @@
+RECORD rtsp://127.0.0.1/2551211145 RTSP/1.0
+Range: npt=0-
+RTP-Info: seq=16808;rtptime=3831345456
+CSeq: 3
+User-Agent: iTunes/7.6.2 (Windows; N;)
+Client-Instance: a710400ce6acb95f
+Session: 1
+

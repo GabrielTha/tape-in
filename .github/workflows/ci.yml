@@ -82,6 +82,18 @@ jobs:
         run: cmake --build build --parallel
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Fuzz (clang only, 60 s per harness)
+        if: matrix.compiler == 'clang' && matrix.sanitize == 'address,undefined'
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          cmake -S . -B build-fuzz -G Ninja -DCMAKE_BUILD_TYPE=Debug -DTAPEIN_SANITIZE=address,undefined -DTAPEIN_FUZZ=ON -DTAPEIN_BUILD_TOOLS=OFF
+          cmake --build build-fuzz --parallel --target fuzz_rtsp_parser fuzz_sdp fuzz_rtp fuzz_alac
+          for h in rtsp_parser sdp rtp alac; do
+            mkdir -p fuzz-work/$h
+            ./build-fuzz/tests/fuzz/fuzz_$h -max_total_time=60 -max_len=2048 fuzz-work/$h tests/fuzz/corpus/$h
+          done
 
   windows:
     name: Windows MSVC (ASan)

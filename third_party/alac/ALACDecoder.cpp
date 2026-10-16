@@ -200,6 +200,8 @@ int32_t ALACDecoder::Decode( BitBuffer * bits, uint8_t * sampleBuffer, uint32_t 
 	
 	RequireAction( (bits != nil) && (sampleBuffer != nil) && (outNumSamples != nil), return kALAC_ParamError; );
 	RequireAction( numChannels > 0, return kALAC_ParamError; );
+	// Tape In: the caller's buffer capacity; a partial-frame header must never raise numSamples above it.
+	const uint32_t		maxSamples = numSamples;
 
 	mActiveElements = 0;
 	channelIndex	= 0;
@@ -245,12 +247,15 @@ int32_t ALACDecoder::Decode( BitBuffer * bits, uint8_t * sampleBuffer, uint32_t 
 				escapeFlag = headerByte & 0x1;
 
 				chanBits = mConfig.bitDepth - (bytesShifted * 8);
+				// Tape In: reject parameter combinations that would shift by >= 32 or by a negative amount (fuzzing finding).
+				RequireAction( chanBits >= 1 && chanBits <= 32, status = kALAC_ParamError; goto Exit; );
 				
 				// check for partial frame to override requested numSamples
 				if ( partialFrame != 0 )
 				{
 					numSamples  = BitBufferRead( bits, 16 ) << 16;
 					numSamples |= BitBufferRead( bits, 16 );
+					RequireAction( numSamples <= maxSamples, status = kALAC_ParamError; goto Exit; );
 				}
 
 				if ( escapeFlag == 0 )
@@ -263,6 +268,8 @@ int32_t ALACDecoder::Decode( BitBuffer * bits, uint8_t * sampleBuffer, uint32_t 
 					headerByte	= (uint8_t) BitBufferRead( bits, 8 );
 					modeU		= headerByte >> 4;
 					denShiftU	= headerByte & 0xfu;
+					// Tape In: a zero denominator shift makes unpc_block shift by -1 (fuzzing finding).
+					RequireAction( denShiftU >= 1, status = kALAC_ParamError; goto Exit; );
 					
 					headerByte	= (uint8_t) BitBufferRead( bits, 8 );
 					pbFactorU	= headerByte >> 5;
@@ -396,12 +403,15 @@ int32_t ALACDecoder::Decode( BitBuffer * bits, uint8_t * sampleBuffer, uint32_t 
 				escapeFlag = headerByte & 0x1;
 
 				chanBits = mConfig.bitDepth - (bytesShifted * 8) + 1;
+				// Tape In: reject parameter combinations that would shift by >= 32 or by a negative amount (fuzzing finding).
+				RequireAction( chanBits >= 1 && chanBits <= 32, status = kALAC_ParamError; goto Exit; );
 				
 				// check for partial frame length to override requested numSamples
 				if ( partialFrame != 0 )
 				{
 					numSamples  = BitBufferRead( bits, 16 ) << 16;
 					numSamples |= BitBufferRead( bits, 16 );
+					RequireAction( numSamples <= maxSamples, status = kALAC_ParamError; goto Exit; );
 				}
 
 				if ( escapeFlag == 0 )
@@ -409,10 +419,14 @@ int32_t ALACDecoder::Decode( BitBuffer * bits, uint8_t * sampleBuffer, uint32_t 
 					// compressed frame, read rest of parameters
 					mixBits		= (uint8_t) BitBufferRead( bits, 8 );
 					mixRes		= (int8_t) BitBufferRead( bits, 8 );
+					// Tape In: mixBits is a shift count in unmix16/unmix20/unmix24/unmix32 (fuzzing finding).
+					RequireAction( mixBits < 32, status = kALAC_ParamError; goto Exit; );
 
 					headerByte	= (uint8_t) BitBufferRead( bits, 8 );
 					modeU		= headerByte >> 4;
 					denShiftU	= headerByte & 0xfu;
+					// Tape In: a zero denominator shift makes unpc_block shift by -1 (fuzzing finding).
+					RequireAction( denShiftU >= 1, status = kALAC_ParamError; goto Exit; );
 					
 					headerByte	= (uint8_t) BitBufferRead( bits, 8 );
 					pbFactorU	= headerByte >> 5;
@@ -423,6 +437,7 @@ int32_t ALACDecoder::Decode( BitBuffer * bits, uint8_t * sampleBuffer, uint32_t 
 					headerByte	= (uint8_t) BitBufferRead( bits, 8 );
 					modeV		= headerByte >> 4;
 					denShiftV	= headerByte & 0xfu;
+					RequireAction( denShiftV >= 1, status = kALAC_ParamError; goto Exit; );
 					
 					headerByte	= (uint8_t) BitBufferRead( bits, 8 );
 					pbFactorV	= headerByte >> 5;

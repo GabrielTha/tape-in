@@ -61,7 +61,8 @@ void unpc_block( int32_t * pc1, int32_t * out, int32_t num, int16_t * coefs, int
 	int32_t *			pout;
 	int32_t				del, del0;
 	uint32_t			chanshift = 32 - chanbits;
-	int32_t				denhalf = 1<<(denshift-1);
+	// Tape In: the decoder legitimately calls with denshift == 0 (numactive 31, mode 1); 1 << -1 is undefined.
+	int32_t				denhalf = (denshift > 0) ? (1 << (denshift - 1)) : 0;
 
 	out[0] = pc1[0];
 	if ( numactive == 0 )

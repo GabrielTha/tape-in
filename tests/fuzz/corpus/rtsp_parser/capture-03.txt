@@ -1,0 +1,9 @@
+SET_PARAMETER rtsp://127.0.0.1/2551211145 RTSP/1.0
+Content-Type: text/parameters
+Content-Length: 18
+CSeq: 4
+User-Agent: iTunes/7.6.2 (Windows; N;)
+Client-Instance: a710400ce6acb95f
+Session: 1
+
+volume: 0.000000

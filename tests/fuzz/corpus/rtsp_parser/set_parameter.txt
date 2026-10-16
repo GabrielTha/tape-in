@@ -1,0 +1,6 @@
+SET_PARAMETER rtsp://1.2.3.4/1 RTSP/1.0
+CSeq: 9
+Content-Type: text/parameters
+Content-Length: 14
+
+volume: -12.5

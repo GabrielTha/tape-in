@@ -44,7 +44,7 @@ run_case() {
     kill "$raop_pid" 2>/dev/null || true
     sleep 2
     kill -INT "$cli_pid" 2>/dev/null || true
-    wait "$cli_pid" 2>/dev/null || true
+    while kill -0 "$cli_pid" 2>/dev/null; do sleep 0.2; done
     echo "== $label: $(grep -o 'announced by.*' "$dir/cli.err" | head -1)"
     grep -o 'ended (.*' "$dir/cli.err" | head -1
     python3 -I "$HERE/wavcompare.py" "$TMP/sent.wav" "$dir"/out/*.wav --min-seconds $((SECONDS_TO_SEND - 3))

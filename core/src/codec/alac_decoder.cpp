@@ -103,7 +103,12 @@ Result<AlacDecoder> AlacDecoder::create(const AlacConfig& config)
     if (status != 0) {
         return makeError(ErrorCode::unsupported, "ALAC decoder init failed");
     }
-    d.m_impl->scratch.resize(kMaxPacketBytes + kGuardBytes);
+    // Room for the packet, for the escape (uncompressed) path reading a
+    // full frame of samples past a truncated packet, and for the bit
+    // reader's look-ahead. Allocated once; zeroed past the packet on every
+    // decode so reads beyond the datagram see silence, never stale data.
+    const size_t escapeBytes = static_cast<size_t>(config.framesPerPacket) * config.channels * 4;
+    d.m_impl->scratch.resize(kMaxPacketBytes + escapeBytes + kGuardBytes);
     return d;
 }
 
@@ -122,7 +127,7 @@ Result<uint32_t> AlacDecoder::decode(std::span<const uint8_t> packet, std::span<
 
     std::vector<uint8_t>& scratch = m_impl->scratch;
     std::memcpy(scratch.data(), packet.data(), packet.size());
-    std::memset(scratch.data() + packet.size(), 0, kGuardBytes);
+    std::memset(scratch.data() + packet.size(), 0, scratch.size() - packet.size());
 
     BitBuffer bits{};
     BitBufferInit(&bits, scratch.data(), static_cast<uint32_t>(packet.size() + kGuardBytes));

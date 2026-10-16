@@ -28,6 +28,8 @@ target_link_libraries(tapein_tests PRIVATE tapein::core tapein::platform tapein:
 include(Catch)
 catch_discover_tests(tapein_tests)
 
+add_subdirectory(fuzz)
+
 if(TAPEIN_INTEGRATION AND TAPEIN_BUILD_TOOLS)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
     if(TAPEIN_ATVREMOTE STREQUAL "")

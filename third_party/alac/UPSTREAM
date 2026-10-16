@@ -2,4 +2,15 @@ Upstream: https://github.com/macosforge/alac
 Commit:   c38887c5c5e64a4b31108733bd79ca9b2496d987 (archived repository)
 Files:    codec/*.c, codec/*.cpp, codec/*.h, LICENSE, codec/APPLE_LICENSE.txt
 License:  Apache-2.0
-Changes:  none (wrapper lives in core/src/codec/)
+Changes (all marked with "Tape In:" comments, found by fuzzing the decoder):
+  ALACDecoder.cpp  reject chanBits outside 1..32 (bytesShifted too large for
+                   the bit depth would shift by >= 32 in unpc_block)
+  ALACDecoder.cpp  reject denShiftU/denShiftV == 0 (unpc_block computes
+                   1 << (denshift - 1))
+  ALACDecoder.cpp  reject a partial-frame sample count larger than the caller's buffer
+                   (it was written to the output and mix buffers unchecked)
+  ALACDecoder.cpp  reject mixBits >= 32 (used as a shift count in matrix_dec.c)
+  dp_dec.c         unpc_block computed 1 << (denshift - 1) before the numactive == 31
+                   branch that the decoder reaches with denshift == 0; now guarded
+  The decoder is also compiled with -fwrapv: the predictor's int32 sums
+  overflow on malformed input (dp_dec.c:347); wraparound is harmless there.

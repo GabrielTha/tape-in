@@ -3,6 +3,9 @@
 
 add_executable(tapein_tests
     unit/version_test.cpp
+    unit/result_test.cpp
+    unit/byte_reader_test.cpp
+    unit/base64_test.cpp
 )
 target_link_libraries(tapein_tests PRIVATE tapein::core tapein::warnings Catch2::Catch2WithMain)
 

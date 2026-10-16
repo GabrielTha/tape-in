@@ -18,6 +18,7 @@ enum class ErrorCode {
     ioError,
     notFound,
     invalidState,
+    wouldBlock, ///< non-blocking operation has nothing to do right now
 };
 
 struct Error {

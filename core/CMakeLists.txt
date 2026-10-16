@@ -16,6 +16,8 @@ add_library(tapein_core STATIC
     src/rtp/rtp_packets.cpp
     src/buffer/jitter_buffer.cpp
     src/util/wav_writer.cpp
+    src/net/socket.cpp
+    src/net/reactor.cpp
 )
 add_library(tapein::core ALIAS tapein_core)
 
@@ -26,3 +28,6 @@ target_link_libraries(tapein_core
     PRIVATE tapein::warnings
     PRIVATE MbedTLS::mbedcrypto
     PRIVATE alac::decoder)
+if(WIN32)
+    target_link_libraries(tapein_core PUBLIC ws2_32)
+endif()

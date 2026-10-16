@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Tape In contributors
+#
+# tapein_core: pure C++20 protocol and audio core. No JUCE, no Objective-C.
+
+add_library(tapein_core STATIC
+    src/version.cpp
+)
+add_library(tapein::core ALIAS tapein_core)
+
+target_include_directories(tapein_core PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+target_compile_features(tapein_core PUBLIC cxx_std_20)
+target_link_libraries(tapein_core PRIVATE tapein::warnings)

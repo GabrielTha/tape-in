@@ -14,3 +14,6 @@
 # Local tooling
 /.cache/
 *.log
+
+# Plan execution workspace (scratch)
+.superpowers/

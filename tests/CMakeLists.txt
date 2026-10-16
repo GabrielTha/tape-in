@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Tape In contributors
+
+add_executable(tapein_tests
+    unit/version_test.cpp
+)
+target_link_libraries(tapein_tests PRIVATE tapein::core tapein::warnings Catch2::Catch2WithMain)
+
+include(Catch)
+catch_discover_tests(tapein_tests)

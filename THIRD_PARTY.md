@@ -13,3 +13,4 @@ and `third_party/`.
 | JUCE | 9.0.4 | AGPL-3.0 (JUCE's open-source option; splash screen disabled as that licence allows) | App layer: UI, audio device I/O, status-bar icon (shipped) | FetchContent, only with `TAPEIN_BUILD_APP` |
 | pyatv | 0.18.0 | MIT | Integration-test sender (not shipped) | `tests/integration/requirements.txt`, installed into a venv |
 | libraop / cliraop | git HEAD 2026-10 | MIT | Encrypted-path integration sender (not shipped, not vendored) | External binary passed to `tests/integration/raop_play_test.sh` |
+| Boldonse | Regular (googlefonts/boldonse, 2024) | OFL-1.1 | App brand wordmark and section titles (shipped, embedded as BinaryData) | `app/Resources/fonts/Boldonse-Regular.ttf`, license in `Boldonse-OFL.txt` |

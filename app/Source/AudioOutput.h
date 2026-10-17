@@ -1,0 +1,51 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Tape In contributors
+
+#pragma once
+
+#include "tapein/core/dsp/mixer.h"
+
+#include <juce_audio_devices/juce_audio_devices.h>
+
+#include <functional>
+
+namespace tapein::app {
+
+/// Owns the output audio device and drives the engine's mixer from its
+/// callback. Output only (0 inputs). Never changes the device sample rate.
+class AudioOutput final : public juce::AudioIODeviceCallback, private juce::ChangeListener {
+public:
+    explicit AudioOutput(core::dsp::Mixer& mixer);
+    ~AudioOutput() override;
+
+    /// Restores a saved device state (or opens the default) and starts.
+    void start(const juce::XmlElement* savedState);
+    void stop();
+
+    [[nodiscard]] juce::StringArray outputDeviceNames() const;
+    [[nodiscard]] juce::String currentOutputName() const;
+    void selectOutput(const juce::String& name);
+    [[nodiscard]] double currentSampleRate() const;
+    [[nodiscard]] std::unique_ptr<juce::XmlElement> deviceState() const;
+
+    /// Called (on the message thread) whenever the device or its rate changes.
+    std::function<void()> onDeviceChanged;
+    /// Reports whether audio is currently running, for the mixer's garbage collector.
+    std::function<void(bool)> onActiveChanged;
+
+    // juce::AudioIODeviceCallback
+    void audioDeviceIOCallbackWithContext(const float* const* inputChannelData, int numInputChannels,
+                                          float* const* outputChannelData, int numOutputChannels, int numSamples,
+                                          const juce::AudioIODeviceCallbackContext& context) override;
+    void audioDeviceAboutToStart(juce::AudioIODevice* device) override;
+    void audioDeviceStopped() override;
+
+    void changeListenerCallback(juce::ChangeBroadcaster*) override;
+
+private:
+    core::dsp::Mixer& m_mixer;
+    juce::AudioDeviceManager m_deviceManager;
+    std::atomic<double> m_sampleRate{44100.0};
+};
+
+} // namespace tapein::app

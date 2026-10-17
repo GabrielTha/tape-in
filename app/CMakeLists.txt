@@ -18,6 +18,9 @@ juce_add_gui_app(TapeIn
 
 target_sources(TapeIn PRIVATE
     Source/Main.cpp
+    Source/Settings.cpp
+    Source/AudioOutput.cpp
+    Source/AppEngine.cpp
 )
 
 target_compile_definitions(TapeIn PRIVATE
@@ -35,6 +38,8 @@ target_link_libraries(TapeIn PRIVATE
     juce::juce_gui_extra
     juce::juce_audio_basics
     juce::juce_audio_devices
+    juce::juce_audio_formats
+    juce::juce_data_structures
     juce::juce_audio_utils
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags

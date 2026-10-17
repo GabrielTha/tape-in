@@ -85,6 +85,7 @@ void AudioOutput::audioDeviceIOCallbackWithContext(const float* const*, int, flo
 void AudioOutput::audioDeviceAboutToStart(juce::AudioIODevice* device)
 {
     m_sampleRate.store(device->getCurrentSampleRate());
+    juce::Logger::writeToLog("audio device: " + device->getName() + " @ " + juce::String(device->getCurrentSampleRate()) + " Hz, outs " + juce::String(device->getActiveOutputChannels().countNumberOfSetBits()));
     m_mixer.setAudioActive(true);
     if (onActiveChanged) {
         onActiveChanged(true);

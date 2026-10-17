@@ -21,6 +21,9 @@ target_sources(TapeIn PRIVATE
     Source/Settings.cpp
     Source/AudioOutput.cpp
     Source/AppEngine.cpp
+    Source/LevelMeter.cpp
+    Source/SourceRow.cpp
+    Source/MainComponent.cpp
 )
 
 target_compile_definitions(TapeIn PRIVATE

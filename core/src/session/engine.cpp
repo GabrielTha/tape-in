@@ -440,7 +440,7 @@ std::vector<SourceSnapshot> Engine::sources() const
         s.solo = src->solo;
         s.senderVolumeDb = src->senderVolumeDb;
         s.targetFillFrames = targetFramesFor(m_config.bufferMode, src->senderLatencyFrames);
-        s.stats = src->stats;
+        s.stats = (src->live && m_receiver) ? m_receiver->sessionStats(src->sessionId) : src->stats;
         if (src->stream != nullptr) {
             const auto& m = src->stream->meters();
             s.state = static_cast<dsp::StreamState>(m.state.load(std::memory_order_relaxed));

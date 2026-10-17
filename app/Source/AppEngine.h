@@ -9,6 +9,11 @@
 #include "tapein/core/crypto/raop_key.h"
 #include "tapein/core/session/engine.h"
 #include "tapein/platform/dns_sd_advertiser.h"
+#if defined(TAPEIN_HAS_LOGIN_ITEM)
+#include "tapein/platform/mac_login_item.h"
+#else
+#include "tapein/platform/null_login_item.h"
+#endif
 
 #include <memory>
 
@@ -28,12 +33,18 @@ public:
 
     [[nodiscard]] core::session::Engine* engine() noexcept { return m_engine.get(); }
     [[nodiscard]] AudioOutput& audio() noexcept { return *m_audio; }
+    [[nodiscard]] core::platform::ILoginItem& loginItem() noexcept { return m_loginItem; }
     [[nodiscard]] const juce::String& lastError() const noexcept { return m_lastError; }
     [[nodiscard]] bool started() const noexcept { return m_started; }
 
 private:
     Settings& m_settings;
     tapein::platform::DnsSdAdvertiser m_advertiser;
+#if defined(TAPEIN_HAS_LOGIN_ITEM)
+    tapein::platform::MacLoginItem m_loginItem;
+#else
+    tapein::platform::NullLoginItem m_loginItem;
+#endif
     std::shared_ptr<core::crypto::RaopRsaKey> m_key;
     std::unique_ptr<core::session::Engine> m_engine;
     std::unique_ptr<AudioOutput> m_audio;

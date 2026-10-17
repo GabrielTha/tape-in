@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <vector>
@@ -272,4 +273,56 @@ TEST_CASE("stop with a live source frees it only after audio is inactive")
     fx.engine->setAudioActive(false);
     fx.engine->stop(); // must not hang or crash
     CHECK(fx.engine->sources().empty());
+}
+
+TEST_CASE("every render block carries audio once playing: no periodic silent blocks")
+{
+    Fixture fx(BufferMode::monitoring, 2);
+    auto c = fx.client();
+    REQUIRE(c.startStream(true).status == 200);
+    REQUIRE(fx.pumpUntil([&] { return !fx.engine->sources().empty(); }));
+    fx.engine->setAudioActive(true);
+
+    // Faithful real-time model: the reactor (releasing audio into the ring on
+    // its 10 ms timer) and the audio callback (consuming 512 frames per block
+    // at 48 kHz = 10.67 ms) advance by the same wall-clock time. Feed packets
+    // at the sender's 44.1 kHz pace. A block that renders silence once playing,
+    // with input available, is a real dropout.
+    int silentBlocks = 0;
+    int audioBlocks = 0;
+    int seq = 0;
+    double owedInputFrames = 0.0; // 44.1 kHz frames we still owe the sender pace
+    for (int block = 0; block < 300; ++block) {
+        // One 512-frame output block at 48 kHz spans 10.667 ms, i.e. 470.4
+        // input frames at 44.1 kHz.
+        owedInputFrames += 44100.0 * 512.0 / 48000.0;
+        while (owedInputFrames >= kFrames) {
+            std::vector<int16_t> pcm(kSamples);
+            for (size_t sm = 0; sm < kFrames; ++sm) {
+                const auto v = static_cast<int16_t>(std::lround(0.5 * 32767.0 * std::sin(2.0 * 3.141592653589793 * 1000.0 * static_cast<double>(static_cast<size_t>(seq) * kFrames + sm) / 44100.0)));
+                pcm[sm * 2] = v;
+                pcm[sm * 2 + 1] = v;
+            }
+            c.sendAudio(static_cast<uint16_t>(seq), static_cast<uint32_t>(seq) * kFrames, l16Payload(pcm));
+            ++seq;
+            owedInputFrames -= kFrames;
+        }
+        // Advance the reactor by one block's worth of wall-clock time so its
+        // release timer fires in step with consumption.
+        const auto until = Clock::now() + std::chrono::microseconds(10667);
+        while (Clock::now() < until) {
+            fx.reactor.runOnce(1ms);
+        }
+        const float peak = fx.renderPeak(512, 48000.0);
+        if (block > 80) { // after buffering + warm-up
+            if (peak < 0.05f) {
+                ++silentBlocks;
+            } else {
+                ++audioBlocks;
+            }
+        }
+    }
+    INFO("audio blocks " << audioBlocks << " silent blocks " << silentBlocks);
+    CHECK(audioBlocks > 150);
+    CHECK(silentBlocks == 0);
 }

@@ -4,6 +4,7 @@
 // Application entry point for the Tape In app.
 
 #include "AppEngine.h"
+#include "MainComponent.h"
 #include "Settings.h"
 
 #include "tapein/core/session/engine.h"
@@ -14,32 +15,49 @@ namespace tapein::app {
 
 class MainWindow final : public juce::DocumentWindow {
 public:
-    MainWindow()
-        : juce::DocumentWindow("Tape In", juce::Colours::darkgrey, juce::DocumentWindow::allButtons)
+    MainWindow(AppEngine& app, Settings& settings)
+        : juce::DocumentWindow("Tape In", juce::Colour(0xff121417), juce::DocumentWindow::allButtons)
     {
         setUsingNativeTitleBar(true);
-        auto* label = new juce::Label({}, "Tape In \xe2\x80\x94 Phase 2 skeleton");
-        label->setJustificationType(juce::Justification::centred);
-        label->setSize(360, 240);
-        setContentOwned(label, true);
-        setResizable(true, false);
-        centreWithSize(getWidth(), getHeight());
+        setContentOwned(new MainComponent(app, settings), true);
+        setResizable(true, true);
+        setResizeLimits(420, 320, 900, 1200);
+        const auto saved = settings.windowBounds();
+        if (!saved.isEmpty()) {
+            setBounds(saved);
+        } else {
+            centreWithSize(getWidth(), getHeight());
+        }
+        m_settings = &settings;
         setVisible(true);
     }
 
     void closeButtonPressed() override { setVisible(false); }
+    void moved() override { save(); }
+    void resized() override { juce::DocumentWindow::resized(); save(); }
+
+private:
+    void save()
+    {
+        if (m_settings != nullptr && isShowing()) {
+            m_settings->setWindowBounds(getBounds());
+        }
+    }
+    Settings* m_settings = nullptr;
 };
 
 class StatusLogger final : public juce::Timer {
 public:
-    explicit StatusLogger(core::session::Engine& engine) : m_engine(engine) { startTimerHz(1); }
+    explicit StatusLogger(core::session::Engine& engine) : m_engine(engine) { startTimer(2000); }
     void timerCallback() override
     {
         for (const auto& s : m_engine.sources()) {
             static const char* names[] = {"buffering", "playing", "fadingOut", "refilling", "stopped"};
             juce::Logger::writeToLog("source " + juce::String(s.sourceId) + " '" + s.clientName + "' "
-                                     + names[static_cast<int>(s.state)] + " fill " + juce::String(s.fillFrames)
-                                     + " peak " + juce::String(s.peakL, 3) + (s.live ? "" : " (disconnected)"));
+                                     + names[static_cast<int>(s.state)] + " level " + juce::String(s.peakL, 2)
+                                     + " packets " + juce::String(s.stats.packetsReceived)
+                                     + " dropouts " + juce::String(s.underruns)
+                                     + (s.live ? "" : " (disconnected)"));
         }
     }
 
@@ -64,7 +82,7 @@ public:
         if (!app->start()) {
             juce::Logger::writeToLog("start failed: " + app->lastError());
         }
-        window = std::make_unique<MainWindow>();
+        window = std::make_unique<MainWindow>(*app, *settings);
         juce::Logger::writeToLog("Tape In ready on port "
                                  + juce::String(app->engine() != nullptr ? app->engine()->rtspPort() : 0));
         if (app->engine() != nullptr) {

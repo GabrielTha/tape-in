@@ -24,11 +24,12 @@ struct Harness {
     uint32_t phase = 0; // tone phase in ring frames
     std::vector<float> left, right; // everything rendered so far, per channel
 
-    explicit Harness(uint32_t ringFrames = 1u << 17, ResamplerQuality q = ResamplerQuality::fastest)
+    explicit Harness(uint32_t ringFrames = 1u << 17, ResamplerQuality q = ResamplerQuality::fastest,
+                     uint32_t maxBlock = 1024)
     {
         auto ring = HeapRing::create(ringFrames);
         REQUIRE(ring.ok());
-        auto s = SourceStream::create(std::move(ring.value()), q, 1024);
+        auto s = SourceStream::create(std::move(ring.value()), q, maxBlock);
         REQUIRE(s.ok());
         stream = std::move(s.value());
         stream->params().targetFillFrames.store(kTarget);
@@ -311,4 +312,22 @@ TEST_CASE("meters report peak, rms, fill and the ratio deviation")
     CHECK(m.rms.load() < m.peakL.load());
     CHECK(m.fillFrames.load() > 0);
     CHECK(std::abs(m.ratioDeviation.load()) <= 0.002f);
+}
+
+TEST_CASE("medium-quality sinc resampling to a 48k device produces real audio, not silence")
+{
+    // Regression: the produce() loop once capped how much input the resampler
+    // was offered per call, which starved the long medium/best sinc filters
+    // and emitted near-silence (found by the app smoke test). Feed a steady
+    // tone and require a healthy output level at every quality.
+    for (auto quality : {ResamplerQuality::fastest, ResamplerQuality::medium, ResamplerQuality::best}) {
+        Harness h(1u << 17, quality, SourceStream::kDefaultMaxBlock);
+        h.feed(kTarget + 8192);
+        for (int i = 0; i < 40; ++i) {
+            h.render(512, 48000.0);
+            h.feed(471); // ~what 512 output frames at 48 kHz consume from a 44.1 kHz ring
+        }
+        REQUIRE(h.state() == StreamState::playing);
+        CHECK(peakAbs(h.left, h.left.size() - 4096) > 0.3);
+    }
 }

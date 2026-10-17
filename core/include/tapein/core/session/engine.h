@@ -143,6 +143,7 @@ private:
     Source* bySession(uint64_t sessionId) noexcept; ///< m_mutex held
     Source* byId(uint64_t sourceId) noexcept; ///< m_mutex held
     void scheduleGc();
+    void refreshStats(); ///< reactor thread: copy live session stats into the registry
     void emit(EngineEvent event); ///< m_mutex held
 
     EngineConfig m_config;
@@ -166,6 +167,7 @@ private:
     std::string m_lastError;
     bool m_running = false;
     bool m_gcScheduled = false;
+    net::Reactor::TimerId m_statsTimer = 0;
 };
 
 } // namespace tapein::core::session

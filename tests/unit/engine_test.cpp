@@ -326,3 +326,106 @@ TEST_CASE("every render block carries audio once playing: no periodic silent blo
     CHECK(audioBlocks > 150);
     CHECK(silentBlocks == 0);
 }
+
+TEST_CASE("reconnect within the linger window does not leak a mixer slot")
+{
+    Fixture fx(BufferMode::monitoring, 2, 5000ms);
+    auto countOccupied = [&] {
+        size_t n = 0;
+        for (uint32_t i = 0; i < fx.engine->mixer().maxSources(); ++i) {
+            if (fx.engine->mixer().source(i) != nullptr) {
+                ++n;
+            }
+        }
+        return n;
+    };
+
+    auto c = fx.client();
+    REQUIRE(c.startStream(true).status == 200);
+    REQUIRE(fx.pumpUntil([&] { return !fx.engine->sources().empty(); }));
+    CHECK(countOccupied() == 1);
+
+    REQUIRE(c.request("TEARDOWN", "DACP-ID: " + c.dacpId + "\r\n").status == 200);
+    REQUIRE(fx.pumpUntil([&] { return !onlySource(fx).live; }));
+    CHECK(countOccupied() == 1); // lingering, still holds its slot
+
+    auto c2 = fx.client();
+    c2.dacpId = c.dacpId; // same client reconnects while the old one lingers
+    REQUIRE(c2.startStream(true).status == 200);
+    REQUIRE(fx.pumpUntil([&] { return onlySource(fx).live; }));
+    fx.pump(300ms); // let the delayed slot removal run
+    // Exactly one stream must occupy the mixer: the old one was retired.
+    CHECK(countOccupied() == 1);
+}
+
+TEST_CASE("owned reactor: concurrent reads with churn are race-free")
+{
+    // The shipping configuration: the Engine owns its network thread, which
+    // the external-reactor fixtures never exercise. Reader threads touch
+    // Engine state the reactor thread mutates. Meant to run under TSan.
+    tapein::platform::NullAdvertiser advertiser;
+    auto key = crypto::RaopRsaKey::load().value();
+
+    // Phase 1: sources()/rtspPort() hammered while sessions churn (issue 1).
+    {
+        EngineConfig cfg;
+        cfg.receiver.name = "Churn";
+        cfg.receiver.bindAddress = loopback(0);
+        cfg.bufferMode = BufferMode::monitoring;
+        cfg.lingerTime = 40ms;
+        Engine engine(std::move(cfg), advertiser, key);
+        REQUIRE(engine.start().ok());
+        REQUIRE(engine.rtspPort() != 0);
+
+        std::atomic<bool> stop{false};
+        std::thread reader([&] {
+            while (!stop.load()) {
+                (void)engine.sources();
+                (void)engine.rtspPort();
+                (void)engine.pollEvents();
+            }
+        });
+        for (int round = 0; round < 6; ++round) {
+            RaopClient c(engine.rtspPort(), [](std::chrono::milliseconds d) { std::this_thread::sleep_for(d); });
+            if (c.startStream(true).status == 200) {
+                for (int pk = 0; pk < 15; ++pk) {
+                    c.sendAudio(static_cast<uint16_t>(pk), static_cast<uint32_t>(pk) * kFrames,
+                                l16Payload(tone(static_cast<uint16_t>(pk))));
+                    std::this_thread::sleep_for(2ms);
+                }
+                (void)c.request("TEARDOWN", "DACP-ID: " + c.dacpId + "\r\n");
+            }
+            std::this_thread::sleep_for(15ms);
+        }
+        stop.store(true);
+        reader.join();
+        engine.stop();
+    }
+
+    // Phase 2: rtspPort()/name() hammered while the receiver is rebuilt by
+    // setName (issue 2); no clients, so no connection races the restart.
+    {
+        EngineConfig cfg;
+        cfg.receiver.name = "Rename";
+        cfg.receiver.bindAddress = loopback(0);
+        Engine engine(std::move(cfg), advertiser, key);
+        REQUIRE(engine.start().ok());
+
+        std::atomic<bool> stop{false};
+        std::thread reader([&] {
+            while (!stop.load()) {
+                (void)engine.rtspPort();
+                (void)engine.name();
+                (void)engine.lastError();
+            }
+        });
+        for (int i = 0; i < 20; ++i) {
+            engine.setName("Name " + std::to_string(i));
+            std::this_thread::sleep_for(5ms);
+        }
+        stop.store(true);
+        reader.join();
+        engine.stop();
+    }
+    SUCCEED("no crash or sanitizer report");
+}

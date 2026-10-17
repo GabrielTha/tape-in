@@ -107,6 +107,12 @@ Result<void> Engine::start()
     if (!m_lastError.empty()) {
         return makeError(ErrorCode::ioError, m_lastError);
     }
+    runOnReactor([this] {
+        // Live session stats are copied from the receiver on the reactor
+        // thread (the only thread that mutates its session list) into the
+        // Engine's own, mutex-protected Source::stats, which sources() reads.
+        m_statsTimer = m_reactor->addTimer(std::chrono::milliseconds{250}, [this] { refreshStats(); }, true);
+    });
     m_running = true;
     if (m_ownsReactor) {
         m_thread = std::thread([this] { m_reactor->run(); });
@@ -120,9 +126,18 @@ void Engine::stop()
         return;
     }
     runOnReactor([this] {
-        if (m_receiver) {
-            m_receiver->stop();
-            m_receiver.reset();
+        if (m_statsTimer != 0) {
+            m_reactor->cancelTimer(m_statsTimer);
+            m_statsTimer = 0;
+        }
+        std::unique_ptr<Receiver> old;
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            old = std::move(m_receiver);
+        }
+        if (old) {
+            old->stop();
+            old.reset();
         }
     });
     m_running = false;
@@ -160,12 +175,21 @@ void Engine::runOnReactor(std::function<void()> fn)
 void Engine::rebuildReceiver()
 {
     runOnReactor([this] {
-        if (m_receiver) {
-            m_receiver->stop();
-            m_receiver.reset();
+        // Move the old receiver out under the lock so a concurrent reader
+        // (rtspPort) never sees a half-reset pointer, then tear it down with
+        // the lock released: stop() ends sessions, which re-enters
+        // onSessionEnded and takes the same mutex.
+        std::unique_ptr<Receiver> old;
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            old = std::move(m_receiver);
+            m_config.receiver.name = m_name;
+            m_config.receiver.holdBackPackets = holdBackPacketsFor(m_config.bufferMode);
         }
-        m_config.receiver.name = m_name;
-        m_config.receiver.holdBackPackets = holdBackPacketsFor(m_config.bufferMode);
+        if (old) {
+            old->stop();
+            old.reset();
+        }
         auto receiver = std::make_unique<Receiver>(*m_reactor, m_config.receiver, *this, m_advertiser, m_key);
         auto r = receiver->start();
         std::lock_guard<std::mutex> lock(m_mutex);
@@ -291,6 +315,7 @@ void Engine::onSessionStarted(const SessionInfo& info)
     const std::string key = info.dacpId.empty() ? ("peer:" + info.peer.toString()) : info.dacpId;
     auto it = m_sources.find(key);
     bool replacement = false;
+    bool created = false;
     Source* src = nullptr;
     if (it != m_sources.end()) {
         src = it->second.get();
@@ -298,16 +323,24 @@ void Engine::onSessionStarted(const SessionInfo& info)
             m_reactor->cancelTimer(src->lingerTimer);
             src->lingerTimer = 0;
         }
-        if (src->live && src->slot != UINT32_MAX) {
-            // Reconnect while still live: fade the old stream, then drop its slot.
-            if (src->stream != nullptr) {
-                src->stream->params().stopRequested.store(true, std::memory_order_relaxed);
-            }
+        if (src->slot != UINT32_MAX) {
+            // The source already holds a mixer slot — either a still-live
+            // stream being replaced, or a lingering (already silent) one
+            // reconnecting. Retire that slot either way, or it leaks: a live
+            // stream fades first, a lingering one goes at once.
             const uint32_t oldSlot = src->slot;
-            m_reactor->addTimer(std::chrono::milliseconds{150}, [this, oldSlot] {
+            if (src->live && src->stream != nullptr) {
+                src->stream->params().stopRequested.store(true, std::memory_order_relaxed);
+                m_reactor->addTimer(std::chrono::milliseconds{150}, [this, oldSlot] {
+                    m_mixer.remove(oldSlot);
+                    scheduleGc();
+                }, false);
+            } else {
                 m_mixer.remove(oldSlot);
                 scheduleGc();
-            }, false);
+            }
+            src->slot = UINT32_MAX;
+            src->stream = nullptr;
             replacement = true;
         }
     } else {
@@ -316,6 +349,7 @@ void Engine::onSessionStarted(const SessionInfo& info)
         owned->dacpId = info.dacpId;
         src = owned.get();
         m_sources.emplace(key, std::move(owned));
+        created = true;
     }
 
     stream->params().userGain.store(raopVolumeDbToGain(src->userGainDb), std::memory_order_relaxed);
@@ -328,6 +362,9 @@ void Engine::onSessionStarted(const SessionInfo& info)
     auto slot = m_mixer.add(std::move(stream));
     if (!slot.has_value()) {
         emit({EngineEvent::Kind::receiverError, 0, "mixer full; cannot add source"});
+        if (created) {
+            m_sources.erase(key); // do not leave a ghost source with no slot
+        }
         return;
     }
     src->sessionId = info.id;
@@ -421,6 +458,19 @@ void Engine::setAudioActive(bool active)
     m_mixer.setAudioActive(active);
 }
 
+void Engine::refreshStats()
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (!m_receiver) {
+        return;
+    }
+    for (auto& [dacp, src] : m_sources) {
+        if (src->live) {
+            src->stats = m_receiver->sessionStats(src->sessionId);
+        }
+    }
+}
+
 std::vector<SourceSnapshot> Engine::sources() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -440,7 +490,7 @@ std::vector<SourceSnapshot> Engine::sources() const
         s.solo = src->solo;
         s.senderVolumeDb = src->senderVolumeDb;
         s.targetFillFrames = targetFramesFor(m_config.bufferMode, src->senderLatencyFrames);
-        s.stats = (src->live && m_receiver) ? m_receiver->sessionStats(src->sessionId) : src->stats;
+        s.stats = src->stats;
         if (src->stream != nullptr) {
             const auto& m = src->stream->meters();
             s.state = static_cast<dsp::StreamState>(m.state.load(std::memory_order_relaxed));
@@ -471,6 +521,10 @@ std::string Engine::name() const
 
 uint16_t Engine::rtspPort() const
 {
+    // The reactor thread swaps m_receiver on rebuild/stop; the lock keeps this
+    // read off a pointer mid-reassignment. rtspPort() itself returns a value
+    // fixed at the receiver's start, so reading it under the lock is safe.
+    std::lock_guard<std::mutex> lock(m_mutex);
     return m_receiver ? m_receiver->rtspPort() : 0;
 }
 

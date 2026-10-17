@@ -8,6 +8,13 @@ project(TapeIn
     DESCRIPTION "Open-source audio receiver that works with AirPlay"
     LANGUAGES C CXX)
 
+if(APPLE)
+    # Objective-C++ (the login-item shim, JUCE's macOS layer) must be a
+    # project language, not enabled from a subdirectory.
+    enable_language(OBJC)
+    enable_language(OBJCXX)
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)

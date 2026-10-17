@@ -34,7 +34,7 @@ struct ReceiverConfig {
     std::chrono::milliseconds inactivityTimeout{120000}; ///< no audio and no RTSP on the session → end it
     std::chrono::milliseconds setupTimeout{10000}; ///< ANNOUNCE without RECORD within this → end it
     uint16_t holdBackPackets = 63; ///< ≈ 500 ms at 352 frames
-    std::string sourceUrl = "https://github.com/tapein/tapein";
+    std::string sourceUrl = "https://github.com/GabrielTha/tape-in";
     std::string txtEt = "0,1"; ///< experiment hook: "0" advertises no encryption
     bool answerAppleChallenge = true; ///< experiment hook
     std::function<void(std::string)> log; ///< optional, network thread

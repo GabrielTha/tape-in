@@ -26,6 +26,7 @@ add_library(tapein_core STATIC
     src/session/rtsp_connection.cpp
     src/session/session.cpp
     src/session/receiver.cpp
+    src/session/engine.cpp
 )
 add_library(tapein::core ALIAS tapein_core)
 

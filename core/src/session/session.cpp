@@ -209,7 +209,11 @@ void Session::onControlDatagram(std::span<const uint8_t> datagram, const net::En
     }
     if (*type == rtp::PayloadType::sync) {
         if (const auto sync = rtp::parseSync(datagram)) {
-            m_stats.senderLatencyFrames = sync->latencyFrames();
+            const uint32_t frames = sync->latencyFrames();
+            if (frames != m_stats.senderLatencyFrames) {
+                m_stats.senderLatencyFrames = frames;
+                m_sink.onSenderLatency(m_info.id, frames);
+            }
         }
     } else if (*type == rtp::PayloadType::resendReply) {
         if (const auto packet = rtp::parseAudio(datagram)) {

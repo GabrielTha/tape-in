@@ -46,6 +46,8 @@ public:
     virtual void onSessionStarted(const SessionInfo& info) = 0;
     virtual void onPcm(uint64_t sessionId, const buffer::ReleasedBlock& block) = 0;
     virtual void onVolume(uint64_t sessionId, float dB) = 0;
+    /// The sender's buffering lead, from the latest sync packet. Optional.
+    virtual void onSenderLatency(uint64_t /*sessionId*/, uint32_t /*frames*/) {}
     virtual void onSessionEnded(uint64_t sessionId, std::string_view reason, const SessionStats& stats) = 0;
 };
 

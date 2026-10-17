@@ -14,3 +14,7 @@ Changes (all marked with "Tape In:" comments, found by fuzzing the decoder):
                    branch that the decoder reaches with denshift == 0; now guarded
   The decoder is also compiled with -fwrapv: the predictor's int32 sums
   overflow on malformed input (dp_dec.c:347); wraparound is harmless there.
+  ag_dec.c         get_next_fromlong shifted a uint32_t by 32 when the suffix
+                   length reached 0 (ag_dec.c:254, found by fuzzing); the macro
+                   now returns 0 for a zero-bit suffix. Seed:
+                   tests/fuzz/corpus/alac/crash-ag_dec-shift32

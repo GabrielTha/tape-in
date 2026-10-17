@@ -129,7 +129,10 @@ static inline uint32_t ALWAYS_INLINE read32bit( uint8_t * buffer )
 #pragma mark -
 #endif
 
-#define get_next_fromlong(inlong, suff)		((inlong) >> (32 - (suff)))
+// Tape In: a malformed stream can drive the suffix length to 0, making the
+// original macro shift a uint32_t by 32 (undefined; found by fuzzing
+// ag_dec.c:254). Reading a zero-bit suffix yields 0, so guard that case.
+#define get_next_fromlong(inlong, suff)		((suff) == 0 ? 0u : ((inlong) >> (32 - (suff))))
 
 
 static inline uint32_t ALWAYS_INLINE

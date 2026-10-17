@@ -16,17 +16,20 @@ Windows port.
 
 ## Status
 
-**Phase 1 done (awaiting the maintainer's acceptance tests):**
-`tapein-cli` advertises a receiver, accepts any number of senders and writes
-each session to a WAV file. Verified end to end against pyatv (clear PCM)
-and cliraop (encrypted PCM and ALAC) with sample-exact results. No app, no
-audio output yet; that is Phase 2. See [docs/SPEC.md](docs/SPEC.md) for the
-plan, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and
-[docs/phase-reports/phase-1.md](docs/phase-reports/phase-1.md) for what was
-built and how to test it.
+**Phase 2 built (awaiting the maintainer's acceptance tests):** a menu-bar
+macOS app that advertises an AirPlay receiver and plays every sender through
+the output you choose, with a per-source fader, mute, solo and meter, a
+renamable destination, buffer-mode options and start-at-login. Phase 1
+(`tapein-cli` receiver to WAV, verified sample-exact against pyatv and
+cliraop) is merged to `main`. See [docs/SPEC.md](docs/SPEC.md) for the plan,
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, and the phase
+reports in [docs/phase-reports/](docs/phase-reports/) for what was built and
+how to test it.
 
 ```sh
-./build/tools/tapein-cli --name "Tape In" --out-dir ~/Desktop/captures
+cmake -S . -B build -DTAPEIN_BUILD_APP=ON
+cmake --build build --parallel --target TapeIn
+open "build/app/TapeIn_artefacts/Debug/Tape In.app"   # allow Local Network when asked
 ```
 
 ## Building

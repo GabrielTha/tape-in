@@ -580,6 +580,7 @@ need AirPlay 2's buffered mode or a different protocol; out of scope.
 | 9 | Notarization/Gatekeeper and SMAppService signing rules | Distribution delays | Low | Developer ID + hardened runtime + `notarytool` pipeline in Phase 4; note: `notarytool` needs Xcode, which is not installed on the maintainer's Mac |
 | 10 | 2 s default latency disappoints users expecting live monitoring | Perceived quality | Certain at default | Document; "sender sync" default with a shorter-buffer mode on the roadmap (§11, Q12); the buffer level is already a per-receiver parameter in the design |
 | 11 | ASIO SDK relicensing details | Windows ASIO support | Low | WASAPI exclusive is the baseline; ASIO only after reading the vendored SDK's headers |
+| 12 | Vendored ALAC decoder issues on Windows (MSVC ASan) | Windows port robustness | Medium | A Windows-only ALAC decoder allocation issue surfaced in CI and is tracked for the Windows phase; it does not affect the macOS build. The decoder is hardened against hostile input on all platforms (see `third_party/alac/UPSTREAM`); the fuzz corpus runs in CI |
 
 ---
 

@@ -135,5 +135,20 @@ cmake/       toolchain and helper modules.
 ## Phase status
 
 - Phase 0 (research and decisions): delivered 2026-10-16 on `phase-0/research`; decisions recorded in ARCHITECTURE.md §13.
-- Phase 1 (CLI receiver): built 2026-10-16 on `phase-1/cli-receiver`; report in `docs/phase-reports/phase-1.md`; waiting for the maintainer's iPhone acceptance tests and OK.
-- Phases 2–6: not started. See `docs/SPEC.md` §6.
+- Phase 1 (CLI receiver): built 2026-10-16 on `phase-1/cli-receiver`, merged to `main`; report in `docs/phase-reports/phase-1.md`.
+- Phase 2 (standalone macOS app): built 2026-10-16 on `phase-2/app`; report in `docs/phase-reports/phase-2.md`; waiting for the maintainer's iPhone acceptance tests and OK. Adds the audio pipeline (SpscRing, Resampler, DriftController, SourceStream, Mixer), the Engine, ILoginItem, and the JUCE menu-bar app. Build the app with `-DTAPEIN_BUILD_APP=ON`.
+- Phases 3–6: not started. See `docs/SPEC.md` §6.
+
+## Things learned building the app (keep)
+
+- The bundled app must get the macOS Local Network permission (macOS 15+/26)
+  before it can advertise; a Terminal CLI is exempt (Apple TN3179) but the
+  `.app` is not, and an unsigned debug build loses the grant on each rebuild.
+- JUCE's `SystemTrayIconComponent` lives in `juce_gui_extra`, not
+  `juce_gui_basics`. Objective-C/C++ must be enabled as project languages at
+  the top level (`enable_language(OBJC/OBJCXX)` on APPLE), not from a subdir.
+- libsamplerate 0.2.2 declares `cmake_minimum_required(3.1..3.18)`; CMake 4
+  needs `CMAKE_POLICY_VERSION_MINIMUM=3.5` set around its FetchContent.
+- The sinc converters (medium/best) need a healthy input block per call; the
+  per-source stream feeds the whole input FIFO and reports fill as ring +
+  FIFO so the drift loop still sees the true level.

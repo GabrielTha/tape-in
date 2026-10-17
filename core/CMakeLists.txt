@@ -18,6 +18,7 @@ add_library(tapein_core STATIC
     src/buffer/spsc_ring.cpp
     src/dsp/resampler.cpp
     src/dsp/drift_controller.cpp
+    src/dsp/source_stream.cpp
     src/util/wav_writer.cpp
     src/net/socket.cpp
     src/net/reactor.cpp

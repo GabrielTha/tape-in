@@ -20,3 +20,4 @@
 
 # Editor/agent session state (hook-generated)
 .anchor/
+.claude/

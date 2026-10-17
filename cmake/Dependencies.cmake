@@ -28,3 +28,30 @@ if(TAPEIN_BUILD_TESTS)
     FetchContent_MakeAvailable(Catch2)
     list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")
 endif()
+
+# libsamplerate 0.2.2 (BSD-2-Clause): sinc resampling with a variable ratio,
+# used by the per-source drift control. process() does not allocate.
+set(LIBSAMPLERATE_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LIBSAMPLERATE_INSTALL OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+# 0.2.2 declares cmake_minimum_required(3.1..3.18); CMake 4 refuses < 3.5
+# unless told which policy baseline to assume for the subproject.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+FetchContent_Declare(libsamplerate
+    GIT_REPOSITORY https://github.com/libsndfile/libsamplerate.git
+    GIT_TAG        0.2.2
+    GIT_SHALLOW    TRUE)
+FetchContent_MakeAvailable(libsamplerate)
+unset(CMAKE_POLICY_VERSION_MINIMUM)
+
+# JUCE 9.0.4 (AGPL-3.0, the option Tape In uses): the app layer only. The
+# core and platform libraries never see it.
+if(TAPEIN_BUILD_APP)
+    set(JUCE_BUILD_EXTRAS OFF CACHE BOOL "" FORCE)
+    set(JUCE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(JUCE
+        GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
+        GIT_TAG        9.0.4
+        GIT_SHALLOW    TRUE)
+    FetchContent_MakeAvailable(JUCE)
+endif()

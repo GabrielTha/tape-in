@@ -30,7 +30,8 @@ target_compile_features(tapein_core PUBLIC cxx_std_20)
 target_link_libraries(tapein_core
     PRIVATE tapein::warnings
     PRIVATE MbedTLS::mbedcrypto
-    PRIVATE alac::decoder)
+    PRIVATE alac::decoder
+    PRIVATE SampleRate::samplerate)
 if(WIN32)
     target_link_libraries(tapein_core PUBLIC ws2_32)
 endif()

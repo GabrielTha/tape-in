@@ -21,9 +21,10 @@ add_executable(tapein_tests
     unit/cli_args_test.cpp
     unit/wav_sink_test.cpp
     unit/capture_writer_test.cpp
+    unit/resampler_test.cpp
 )
 target_link_libraries(tapein_tests PRIVATE tapein::core tapein::platform tapein::cli_lib tapein::warnings
-    Catch2::Catch2WithMain alac::encoder MbedTLS::mbedcrypto)
+    Catch2::Catch2WithMain alac::encoder MbedTLS::mbedcrypto SampleRate::samplerate)
 
 include(Catch)
 catch_discover_tests(tapein_tests)

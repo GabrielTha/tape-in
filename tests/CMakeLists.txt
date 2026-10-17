@@ -23,6 +23,7 @@ add_executable(tapein_tests
     unit/capture_writer_test.cpp
     unit/resampler_test.cpp
     unit/spsc_ring_test.cpp
+    unit/drift_controller_test.cpp
 )
 target_link_libraries(tapein_tests PRIVATE tapein::core tapein::platform tapein::cli_lib tapein::warnings
     Catch2::Catch2WithMain alac::encoder MbedTLS::mbedcrypto SampleRate::samplerate)

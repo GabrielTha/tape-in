@@ -24,6 +24,8 @@ target_sources(TapeIn PRIVATE
     Source/LevelMeter.cpp
     Source/SourceRow.cpp
     Source/MainComponent.cpp
+    Source/TrayIcon.cpp
+    Source/AboutComponent.cpp
 )
 
 target_compile_definitions(TapeIn PRIVATE

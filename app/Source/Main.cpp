@@ -4,8 +4,10 @@
 // Application entry point for the Tape In app.
 
 #include "AppEngine.h"
+#include "AboutComponent.h"
 #include "MainComponent.h"
 #include "Settings.h"
+#include "TrayIcon.h"
 
 #include "tapein/core/session/engine.h"
 
@@ -83,15 +85,32 @@ public:
             juce::Logger::writeToLog("start failed: " + app->lastError());
         }
         window = std::make_unique<MainWindow>(*app, *settings);
+        tray = std::make_unique<TrayIcon>(app->loginItem());
+        tray->onToggleWindow = [this] { toggleWindow(); };
+        tray->onAbout = [] { AboutComponent::show(); };
+        tray->onQuit = [this] { systemRequestedQuit(); };
         juce::Logger::writeToLog("Tape In ready on port "
                                  + juce::String(app->engine() != nullptr ? app->engine()->rtspPort() : 0));
         if (app->engine() != nullptr) {
             status = std::make_unique<StatusLogger>(*app->engine());
         }
     }
+
+    void toggleWindow()
+    {
+        if (window == nullptr) {
+            return;
+        }
+        const bool show = !window->isVisible();
+        window->setVisible(show);
+        if (show) {
+            window->toFront(true);
+        }
+    }
     void shutdown() override
     {
         status.reset();
+        tray.reset();
         window.reset();
         if (app != nullptr) {
             app->stop();
@@ -109,6 +128,7 @@ private:
     std::unique_ptr<StatusLogger> status;
     std::unique_ptr<AppEngine> app;
     std::unique_ptr<MainWindow> window;
+    std::unique_ptr<TrayIcon> tray;
 };
 
 } // namespace tapein::app

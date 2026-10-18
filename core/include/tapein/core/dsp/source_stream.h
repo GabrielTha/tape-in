@@ -22,6 +22,7 @@ struct SourceParams {
     std::atomic<float> senderGain{1.0f}; ///< linear, from the RTSP volume
     std::atomic<float> userGain{1.0f}; ///< linear, from the fader
     std::atomic<bool> mute{false};
+    std::atomic<bool> held{false}; ///< pending approval: silent until the user allows the connection
     std::atomic<bool> solo{false};
     std::atomic<bool> ignoreSenderGain{false};
     std::atomic<uint32_t> targetFillFrames{66150}; ///< ring frames to hold before / while playing

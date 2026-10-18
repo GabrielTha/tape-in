@@ -62,6 +62,9 @@ public:
     [[nodiscard]] platform::ServiceRecord serviceRecord() const;
     [[nodiscard]] size_t sessionCount() const noexcept;
     [[nodiscard]] SessionStats sessionStats(uint64_t sessionId) const;
+    /// Tear down a session by id (reactor thread): the owner declining a
+    /// pending connection. Forwards to the private endSession.
+    void dropSession(uint64_t id, std::string_view reason);
     [[nodiscard]] const ReceiverConfig& config() const noexcept { return m_config; }
 
 private:

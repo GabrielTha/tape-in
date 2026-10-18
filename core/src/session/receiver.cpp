@@ -225,6 +225,11 @@ Session* Receiver::findSession(uint64_t id) noexcept
     return nullptr;
 }
 
+void Receiver::dropSession(uint64_t id, std::string_view reason)
+{
+    endSession(id, reason);
+}
+
 void Receiver::endSession(uint64_t id, std::string_view reason)
 {
     if (Session* s = findSession(id)) {

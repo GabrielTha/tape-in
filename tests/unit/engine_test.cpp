@@ -654,3 +654,45 @@ TEST_CASE("setRequirePassword re-advertises pw=true")
         return false;
     }));
 }
+
+TEST_CASE("ask-before-accept holds a new connection silent until it is approved")
+{
+    Fixture fx;
+    fx.engine->setAskBeforeAccept(true);
+    auto c = fx.client();
+    REQUIRE(c.startStream(true).status == 200);
+    REQUIRE(fx.pumpUntil([&] { return !fx.engine->sources().empty(); }));
+    auto snap = onlySource(fx);
+    CHECK(snap.pending); // the UI shows Allow/Decline
+    CHECK(snap.live);    // the RTSP session was accepted
+
+    // While pending the source is held silent, even with audio flowing.
+    feedTone(fx, c, 30);
+    fx.pump(100ms);
+    CHECK(fx.renderPeakOver(8) < 0.01f);
+
+    // Approving clears pending and lets the audio through.
+    fx.engine->approveConnection(snap.sourceId);
+    CHECK_FALSE(onlySource(fx).pending);
+    feedTone(fx, c, 30);
+    fx.pump(100ms);
+    CHECK(fx.renderPeakOver(8) > 0.3f);
+}
+
+TEST_CASE("declining a pending connection ends the session and removes the source at once")
+{
+    // A long linger proves the decline removes immediately rather than waiting it out.
+    Fixture fx(BufferMode::monitoring, 2, 5000ms);
+    fx.engine->setAskBeforeAccept(true);
+    auto c = fx.client();
+    REQUIRE(c.startStream(true).status == 200);
+    REQUIRE(fx.pumpUntil([&] { return !fx.engine->sources().empty(); }));
+    const uint64_t id = onlySource(fx).sourceId;
+    REQUIRE(onlySource(fx).pending);
+
+    fx.engine->declineConnection(id);
+    REQUIRE(fx.pumpUntil([&] { return fx.engine->sources().empty(); }, 2000ms));
+    auto events = fx.engine->pollEvents();
+    CHECK(std::any_of(events.begin(), events.end(),
+                      [id](const EngineEvent& e) { return e.kind == EngineEvent::Kind::sourceRemoved && e.sourceId == id; }));
+}

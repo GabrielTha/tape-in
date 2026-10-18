@@ -36,6 +36,7 @@ struct EngineConfig {
     BufferMode bufferMode = BufferMode::senderSync;
     bool ignoreSenderVolume = false;
     bool exclusiveSolo = false; ///< soloing one source clears solo on the others
+    bool askBeforeAccept = false; ///< hold a new connection silent until the user allows it
     dsp::ResamplerQuality quality = dsp::ResamplerQuality::medium;
     std::chrono::milliseconds lingerTime{30000};
     uint32_t ringFrames = 262144; ///< ≈ 5.9 s at 44.1 kHz, power of two
@@ -45,6 +46,7 @@ struct EngineConfig {
 /// registry lock; never read on the audio thread.
 struct SourceSnapshot {
     uint64_t sourceId = 0;
+    bool pending = false; ///< awaiting the user's allow/decline (held silent)
     std::string clientName;
     std::string dacpId;
     std::string activeRemote;
@@ -114,6 +116,13 @@ public:
     void setRequirePassword(bool require, std::string password);
     /// When true, enabling solo on one source clears it on the others.
     void setExclusiveSolo(bool exclusive);
+    /// When true, a new connection is accepted but held silent until the user
+    /// approves it; affects only sessions that start after this is set.
+    void setAskBeforeAccept(bool ask);
+    /// Release a pending source: its audio flows and `pending` clears.
+    void approveConnection(uint64_t sourceId);
+    /// Reject a pending source: tear down its RTSP session and remove it now.
+    void declineConnection(uint64_t sourceId);
 
     void setUserGainDb(uint64_t sourceId, float dB);
     void setMute(uint64_t sourceId, bool mute);
@@ -150,6 +159,7 @@ private:
         std::string dacpId;
         uint64_t sessionId = 0;
         uint32_t slot = UINT32_MAX;
+        bool pending = false; ///< awaiting allow/decline; held silent until approved
         dsp::SourceStream* stream = nullptr; ///< owned by the mixer; touched only under m_mutex (never the audio thread)
         bool live = false;
         float userGainDb = 0.0f;

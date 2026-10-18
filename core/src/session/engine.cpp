@@ -256,6 +256,45 @@ void Engine::setExclusiveSolo(bool exclusive)
     m_config.exclusiveSolo = exclusive;
 }
 
+void Engine::setAskBeforeAccept(bool ask)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_config.askBeforeAccept = ask;
+}
+
+void Engine::approveConnection(uint64_t sourceId)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (Source* src = byId(sourceId); src != nullptr && src->pending) {
+        src->pending = false;
+        if (src->stream != nullptr) {
+            src->stream->params().held.store(false, std::memory_order_relaxed);
+        }
+        emit({EngineEvent::Kind::sourceChanged, sourceId, {}});
+    }
+}
+
+void Engine::declineConnection(uint64_t sourceId)
+{
+    uint64_t sessionId = 0;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        Source* src = byId(sourceId);
+        if (src == nullptr || !src->pending) {
+            return;
+        }
+        sessionId = src->sessionId; // stays pending so onSessionEnded removes it at once
+    }
+    // End the RTSP session off-lock on the reactor: endSession re-enters
+    // onSessionEnded, which takes m_mutex and, seeing the source still pending,
+    // removes it immediately.
+    runOnReactor([this, sessionId] {
+        if (m_receiver) {
+            m_receiver->dropSession(sessionId, "declined");
+        }
+    });
+}
+
 void Engine::setUserGainDb(uint64_t sourceId, float dB)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -442,6 +481,11 @@ void Engine::onSessionStarted(const SessionInfo& info)
     src->live = true;
     src->info = info;
     src->senderLatencyFrames = 0;
+    // Ask-before-accept: accept the RTSP session but hold the source silent
+    // (and flag it for the UI) until the user approves it. Re-armed on every
+    // (re)connection, since decisions are not remembered.
+    src->pending = m_config.askBeforeAccept;
+    streamPtr->params().held.store(src->pending, std::memory_order_relaxed);
     applyTarget(*src);
     m_bySession[info.id] = src;
     emit({replacement ? EngineEvent::Kind::sourceChanged : EngineEvent::Kind::sourceAdded, src->sourceId, info.clientName});
@@ -526,6 +570,18 @@ void Engine::onSessionEnded(uint64_t sessionId, std::string_view /*reason*/, con
     src->stats = stats;
     const uint64_t sourceId = src->sourceId;
     const std::string key = src->dacpId.empty() ? ("peer:" + src->info.peer.toString()) : src->dacpId;
+    // A connection that ends while still pending (declined, or abandoned before
+    // the user chose) was never approved, so it vanishes at once rather than
+    // lingering as a "disconnected" row.
+    if (src->pending) {
+        if (src->slot != UINT32_MAX) {
+            m_mixer.remove(src->slot);
+            scheduleGc();
+        }
+        m_sources.erase(key);
+        emit({EngineEvent::Kind::sourceRemoved, sourceId, {}});
+        return;
+    }
     emit({EngineEvent::Kind::sourceChanged, sourceId, "disconnected"});
     src->lingerTimer = m_reactor->addTimer(m_config.lingerTime, [this, key, sourceId] {
         std::lock_guard<std::mutex> lk(m_mutex);
@@ -580,6 +636,7 @@ std::vector<SourceSnapshot> Engine::sources() const
     for (const auto& [dacp, src] : m_sources) {
         SourceSnapshot s;
         s.sourceId = src->sourceId;
+        s.pending = src->pending;
         s.clientName = src->info.clientName;
         s.dacpId = src->info.dacpId;
         s.activeRemote = src->info.activeRemote;

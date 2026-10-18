@@ -198,7 +198,8 @@ void SourceStream::renderChunk(float* left, float* right, uint32_t frames, doubl
     const float sender = m_params.ignoreSenderGain.load(std::memory_order_relaxed) ? 1.0f : m_params.senderGain.load(std::memory_order_relaxed);
     const float user = m_params.userGain.load(std::memory_order_relaxed);
     const float muteGate = m_params.mute.load(std::memory_order_relaxed) ? 0.0f : 1.0f;
-    const float targetGain = sender * user * muteGate * soloGate * fadeTarget;
+    const float heldGate = m_params.held.load(std::memory_order_relaxed) ? 0.0f : 1.0f;
+    const float targetGain = sender * user * muteGate * heldGate * soloGate * fadeTarget;
 
     applyGainAndMix(left, right, frames, targetGain);
     m_fade = fadeTarget;

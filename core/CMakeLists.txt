@@ -7,6 +7,7 @@ add_library(tapein_core STATIC
     src/version.cpp
     src/util/base64.cpp
     src/util/text.cpp
+    src/util/format.cpp
     src/rtsp/rtsp_message.cpp
     src/rtsp/rtsp_parser.cpp
     src/rtsp/sdp.cpp

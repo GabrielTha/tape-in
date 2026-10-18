@@ -16,11 +16,14 @@ juce_add_gui_app(TapeIn
     NEEDS_CURL FALSE
     NEEDS_WEB_BROWSER FALSE)
 
+juce_add_binary_data(TapeInData SOURCES Resources/fonts/Boldonse.ttf)
+
 target_sources(TapeIn PRIVATE
     Source/Main.cpp
     Source/Settings.cpp
     Source/AudioOutput.cpp
     Source/AppEngine.cpp
+    Source/Theme.cpp
     Source/LevelMeter.cpp
     Source/SourceRow.cpp
     Source/MainComponent.cpp
@@ -39,6 +42,7 @@ target_compile_definitions(TapeIn PRIVATE
 
 target_link_libraries(TapeIn PRIVATE
     tapein::platform
+    TapeInData
     juce::juce_gui_basics
     juce::juce_gui_extra
     juce::juce_audio_basics

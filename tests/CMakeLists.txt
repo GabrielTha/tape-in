@@ -10,6 +10,7 @@ add_executable(tapein_tests
     unit/rtsp_parser_test.cpp
     unit/sdp_test.cpp
     unit/crypto_test.cpp
+    unit/digest_auth_test.cpp
     unit/alac_decoder_test.cpp
     unit/rtp_packets_test.cpp
     unit/jitter_buffer_test.cpp

@@ -13,6 +13,7 @@ add_library(tapein_core STATIC
     src/rtsp/sdp.cpp
     src/crypto/raop_key.cpp
     src/crypto/apple_challenge.cpp
+    src/crypto/digest_auth.cpp
     src/crypto/aes_cbc.cpp
     src/codec/alac_decoder.cpp
     src/rtp/rtp_packets.cpp

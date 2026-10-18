@@ -29,6 +29,7 @@
 
 // Hashes (SHA-1 for OAEP/MGF1; SHA-256 for the DRBG)
 #define MBEDTLS_MD_C
+#define MBEDTLS_MD5_C
 #define MBEDTLS_SHA1_C
 #define MBEDTLS_SHA224_C
 #define MBEDTLS_SHA256_C

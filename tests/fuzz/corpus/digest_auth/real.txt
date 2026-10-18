@@ -1,0 +1,1 @@
+Digest username="iTunes", realm="Tape In", nonce="abc123", uri="rtsp://h/s", response="deadbeef"

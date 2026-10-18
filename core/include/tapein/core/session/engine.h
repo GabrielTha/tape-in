@@ -60,6 +60,15 @@ struct SourceSnapshot {
     bool solo = false;
     float ratioDeviation = 0.0f;
     SessionStats stats;
+    // Now-playing (Phase 3), pushed by the sender.
+    std::string trackName;
+    std::string artist;
+    std::string album;
+    bool hasArtwork = false;
+    std::vector<uint8_t> artwork;
+    std::string artworkMime;
+    uint32_t elapsedSeconds = 0;
+    uint32_t durationSeconds = 0;
 };
 
 struct EngineEvent {
@@ -113,6 +122,9 @@ private:
     void onPcm(uint64_t sessionId, const buffer::ReleasedBlock& block) override;
     void onVolume(uint64_t sessionId, float dB) override;
     void onSenderLatency(uint64_t sessionId, uint32_t frames) override;
+    void onMetadata(uint64_t sessionId, const DmapMetadata& metadata) override;
+    void onArtwork(uint64_t sessionId, std::span<const uint8_t> image, std::string_view mime) override;
+    void onProgress(uint64_t sessionId, const DmapProgress& progress) override;
     void onSessionEnded(uint64_t sessionId, std::string_view reason, const SessionStats& stats) override;
 
     struct Source {
@@ -129,6 +141,10 @@ private:
         uint32_t senderLatencyFrames = 0;
         SessionInfo info;
         SessionStats stats;
+        DmapMetadata metadata;
+        std::vector<uint8_t> artwork;
+        std::string artworkMime;
+        DmapProgress progress;
         net::Reactor::TimerId lingerTimer = 0;
     };
 

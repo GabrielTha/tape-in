@@ -168,6 +168,46 @@ TEST_CASE("RTSP volume sets the sender gain unless ignoreSenderVolume is on")
     CHECK(loud > 0.4f);
 }
 
+TEST_CASE("now-playing metadata and progress reach the source snapshot")
+{
+    Fixture fx;
+    auto c = fx.client();
+    REQUIRE(c.startStream(true).status == 200);
+    REQUIRE(fx.pumpUntil([&] { return !fx.engine->sources().empty(); }));
+
+    // DMAP metadata: minm + asar.
+    std::string dmap;
+    auto appendTag = [&](const char* code, std::string_view v) {
+        dmap += code;
+        const auto n = static_cast<uint32_t>(v.size());
+        dmap.push_back(static_cast<char>((n >> 24) & 0xFF));
+        dmap.push_back(static_cast<char>((n >> 16) & 0xFF));
+        dmap.push_back(static_cast<char>((n >> 8) & 0xFF));
+        dmap.push_back(static_cast<char>(n & 0xFF));
+        dmap += v;
+    };
+    appendTag("minm", "Midnight C");
+    appendTag("asar", "M83");
+
+    REQUIRE(c.request("SET_PARAMETER", "DACP-ID: " + c.dacpId + "\r\nContent-Type: application/x-dmap-tagged\r\n", dmap).status == 200);
+    // progress: start=1, cur=44101 (1 s in), end=176401 (~4 s).
+    REQUIRE(c.request("SET_PARAMETER", "DACP-ID: " + c.dacpId + "\r\nContent-Type: text/parameters\r\n", "progress: 1/44101/176401\r\n").status == 200);
+
+    REQUIRE(fx.pumpUntil([&] { return onlySource(fx).trackName == "Midnight C"; }));
+    auto snap = onlySource(fx);
+    CHECK(snap.artist == "M83");
+    CHECK(snap.elapsedSeconds == 1u);
+    CHECK(snap.durationSeconds >= 3u);
+
+    bool sawChanged = false;
+    for (const auto& e : fx.engine->pollEvents()) {
+        if (e.kind == EngineEvent::Kind::sourceChanged) {
+            sawChanged = true;
+        }
+    }
+    CHECK(sawChanged);
+}
+
 TEST_CASE("teardown leaves the source lingering, then removes it with an event")
 {
     Fixture fx(BufferMode::monitoring, 2, 150ms);

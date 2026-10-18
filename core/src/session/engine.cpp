@@ -399,6 +399,38 @@ void Engine::onSenderLatency(uint64_t sessionId, uint32_t frames)
     }
 }
 
+void Engine::onMetadata(uint64_t sessionId, const DmapMetadata& metadata)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    Source* src = bySession(sessionId);
+    if (src != nullptr) {
+        src->metadata = metadata;
+        emit({EngineEvent::Kind::sourceChanged, src->sourceId, {}});
+    }
+}
+
+void Engine::onArtwork(uint64_t sessionId, std::span<const uint8_t> image, std::string_view mime)
+{
+    constexpr size_t kMaxArtworkBytes = 1024 * 1024;
+    std::lock_guard<std::mutex> lock(m_mutex);
+    Source* src = bySession(sessionId);
+    if (src != nullptr && image.size() <= kMaxArtworkBytes) {
+        src->artwork.assign(image.begin(), image.end());
+        src->artworkMime = std::string(mime);
+        emit({EngineEvent::Kind::sourceChanged, src->sourceId, {}});
+    }
+}
+
+void Engine::onProgress(uint64_t sessionId, const DmapProgress& progress)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    Source* src = bySession(sessionId);
+    if (src != nullptr) {
+        src->progress = progress;
+        emit({EngineEvent::Kind::sourceChanged, src->sourceId, {}});
+    }
+}
+
 void Engine::onSessionEnded(uint64_t sessionId, std::string_view /*reason*/, const SessionStats& stats)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -481,6 +513,16 @@ std::vector<SourceSnapshot> Engine::sources() const
         s.senderVolumeDb = src->senderVolumeDb;
         s.targetFillFrames = targetFramesFor(m_config.bufferMode, src->senderLatencyFrames);
         s.stats = src->stats;
+        s.trackName = src->metadata.trackName;
+        s.artist = src->metadata.artist;
+        s.album = src->metadata.album;
+        s.hasArtwork = !src->artwork.empty();
+        s.artwork = src->artwork;
+        s.artworkMime = src->artworkMime;
+        constexpr uint32_t kSampleRate = 44100;
+        const auto& pg = src->progress;
+        s.elapsedSeconds = pg.currentFrames >= pg.startFrames ? (pg.currentFrames - pg.startFrames) / kSampleRate : 0u;
+        s.durationSeconds = pg.endFrames >= pg.startFrames ? (pg.endFrames - pg.startFrames) / kSampleRate : 0u;
         if (src->stream != nullptr) {
             const auto& m = src->stream->meters();
             s.state = static_cast<dsp::StreamState>(m.state.load(std::memory_order_relaxed));

@@ -20,6 +20,10 @@ inline const juce::Colour text{0xffe9ebee};
 inline const juce::Colour muted{0xff9097a0};
 inline const juce::Colour faint{0xff6d7680};
 inline const juce::Colour dim{0xff454d57};
+inline const juce::Colour dimmer{0xff4e565f};
+inline const juce::Colour subtitle{0xff9097a0};
+inline const juce::Colour scrim{0x998d090b}; // rgba(8,9,11,0.6)
+inline const juce::Colour hover{0xff20242a};
 inline const juce::Colour playing{0xff5fcf86};
 inline const juce::Colour shadowDark{0x8c000000};
 inline const juce::Colour shadowLight{0x0affffff};
@@ -36,6 +40,22 @@ void drawRaised(juce::Graphics& g, juce::Rectangle<float> bounds, float radius, 
 
 /// A recessed (inset) well: dark inner shadow top-left, light bottom-right.
 void drawInset(juce::Graphics& g, juce::Rectangle<float> bounds, float radius, juce::Colour fill = colours::inset);
+
+/// Line/fill icons transcribed from the design's 24x24 SVGs, each drawn to
+/// fill `box` (assumed square) in the given colour. Stroke width is in box px.
+namespace icons {
+void reel(juce::Graphics&, juce::Rectangle<float> box, juce::Colour, float stroke = 1.6f);
+void speakerLow(juce::Graphics&, juce::Rectangle<float> box, juce::Colour, float stroke = 1.7f);
+void speakerHigh(juce::Graphics&, juce::Rectangle<float> box, juce::Colour, float stroke = 1.7f);
+void gear(juce::Graphics&, juce::Rectangle<float> box, juce::Colour, float stroke = 1.7f);
+void chevron(juce::Graphics&, juce::Rectangle<float> box, juce::Colour, bool up, float stroke = 2.0f);
+void check(juce::Graphics&, juce::Rectangle<float> box, juce::Colour, float stroke = 2.2f);
+void stack(juce::Graphics&, juce::Rectangle<float> box, juce::Colour, float stroke = 1.5f);
+void prev(juce::Graphics&, juce::Rectangle<float> box, juce::Colour, float stroke = 1.7f);
+void next(juce::Graphics&, juce::Rectangle<float> box, juce::Colour, float stroke = 1.7f);
+void play(juce::Graphics&, juce::Rectangle<float> box, juce::Colour);
+void pause(juce::Graphics&, juce::Rectangle<float> box, juce::Colour);
+} // namespace icons
 
 /// App-wide LookAndFeel: dark neumorphic colours for sliders, buttons, combos.
 class NeumorphicLookAndFeel final : public juce::LookAndFeel_V4 {

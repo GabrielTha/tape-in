@@ -49,6 +49,159 @@ void drawInset(juce::Graphics& g, juce::Rectangle<float> bounds, float radius, j
     g.drawRoundedRectangle(bounds.reduced(0.5f), radius, 1.0f);
 }
 
+namespace icons {
+
+namespace {
+// Maps a path authored in a 24x24 viewBox onto `box`.
+juce::AffineTransform fit(juce::Rectangle<float> box)
+{
+    return juce::AffineTransform::scale(box.getWidth() / 24.0f, box.getHeight() / 24.0f)
+        .translated(box.getX(), box.getY());
+}
+void strokeVb(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c, float stroke, juce::Path p)
+{
+    p.applyTransform(fit(box));
+    g.setColour(c);
+    g.strokePath(p, juce::PathStrokeType(stroke, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+void fillVb(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c, juce::Path p)
+{
+    p.applyTransform(fit(box));
+    g.setColour(c);
+    g.fillPath(p);
+}
+} // namespace
+
+void reel(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c, float stroke)
+{
+    juce::Path p;
+    p.addEllipse(12 - 8.5f, 12 - 8.5f, 17, 17);
+    p.addEllipse(12 - 2, 12 - 2, 4, 4);
+    strokeVb(g, box, c, stroke, p);
+}
+
+void speakerLow(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c, float stroke)
+{
+    juce::Path p; // M4 9v6h4l5 4V5L8 9z
+    p.startNewSubPath(4, 9);
+    p.lineTo(4, 15);
+    p.lineTo(8, 15);
+    p.lineTo(13, 19);
+    p.lineTo(13, 5);
+    p.lineTo(8, 9);
+    p.closeSubPath();
+    strokeVb(g, box, c, stroke, p);
+}
+
+void speakerHigh(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c, float stroke)
+{
+    speakerLow(g, box, c, stroke);
+    juce::Path p; // two sound arcs
+    p.addCentredArc(13.0f, 12.0f, 3.5f, 4.0f, 0.0f, 0.1f, 3.04f, true);
+    p.addCentredArc(13.0f, 12.0f, 6.0f, 6.5f, 0.0f, 0.2f, 2.94f, true);
+    strokeVb(g, box, c, stroke, p);
+}
+
+void gear(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c, float stroke)
+{
+    juce::Path p;
+    p.addEllipse(12 - 3, 12 - 3, 6, 6);
+    for (int i = 0; i < 8; ++i) {
+        const float a = juce::MathConstants<float>::pi * static_cast<float>(i) / 4.0f;
+        const float ca = std::cos(a), sa = std::sin(a);
+        p.startNewSubPath(12 + ca * 6.0f, 12 + sa * 6.0f);
+        p.lineTo(12 + ca * 9.5f, 12 + sa * 9.5f);
+    }
+    strokeVb(g, box, c, stroke, p);
+}
+
+void chevron(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c, bool up, float stroke)
+{
+    juce::Path p;
+    if (up) {
+        p.startNewSubPath(6, 15);
+        p.lineTo(12, 9);
+        p.lineTo(18, 15);
+    } else {
+        p.startNewSubPath(6, 9);
+        p.lineTo(12, 15);
+        p.lineTo(18, 9);
+    }
+    strokeVb(g, box, c, stroke, p);
+}
+
+void check(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c, float stroke)
+{
+    juce::Path p; // M5 12l5 5 9-11
+    p.startNewSubPath(5, 12);
+    p.lineTo(10, 17);
+    p.lineTo(19, 6);
+    strokeVb(g, box, c, stroke, p);
+}
+
+void stack(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c, float stroke)
+{
+    juce::Path p;
+    p.addRoundedRectangle(4.0f, 7.0f, 12.0f, 12.0f, 2.0f);
+    p.startNewSubPath(8, 7); // M8 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2
+    p.lineTo(8, 5);
+    p.quadraticTo(8, 3, 10, 3);
+    p.lineTo(18, 3);
+    p.quadraticTo(20, 3, 20, 5);
+    p.lineTo(20, 13);
+    p.quadraticTo(20, 15, 18, 15);
+    p.lineTo(16, 15);
+    strokeVb(g, box, c, stroke, p);
+}
+
+void prev(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c, float stroke)
+{
+    juce::Path bar; // vertical bar at x=6
+    bar.startNewSubPath(6, 5.5f);
+    bar.lineTo(6, 18.5f);
+    strokeVb(g, box, c, stroke, bar);
+    juce::Path tri; // M19 6 9 12l10 6z
+    tri.startNewSubPath(19, 6);
+    tri.lineTo(9, 12);
+    tri.lineTo(19, 18);
+    tri.closeSubPath();
+    fillVb(g, box, c, tri);
+}
+
+void next(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c, float stroke)
+{
+    juce::Path tri; // M5 6l10 6-10 6z
+    tri.startNewSubPath(5, 6);
+    tri.lineTo(15, 12);
+    tri.lineTo(5, 18);
+    tri.closeSubPath();
+    fillVb(g, box, c, tri);
+    juce::Path bar; // vertical bar at x=18
+    bar.startNewSubPath(18, 5.5f);
+    bar.lineTo(18, 18.5f);
+    strokeVb(g, box, c, stroke, bar);
+}
+
+void play(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c)
+{
+    juce::Path p; // M7 5 19 12 7 19z
+    p.startNewSubPath(7, 5);
+    p.lineTo(19, 12);
+    p.lineTo(7, 19);
+    p.closeSubPath();
+    fillVb(g, box, c, p);
+}
+
+void pause(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c)
+{
+    juce::Path p;
+    p.addRoundedRectangle(7.5f, 5.0f, 2.6f, 14.0f, 1.0f);
+    p.addRoundedRectangle(13.9f, 5.0f, 2.6f, 14.0f, 1.0f);
+    fillVb(g, box, c, p);
+}
+
+} // namespace icons
+
 NeumorphicLookAndFeel::NeumorphicLookAndFeel()
 {
     setColour(juce::ResizableWindow::backgroundColourId, colours::background);

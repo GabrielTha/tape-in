@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "tapein/core/platform/service_resolver.h"
+
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -23,5 +25,19 @@ enum class TransportCommand { playPause, next, previous };
 /// Active-Remote and Connection: close.
 [[nodiscard]] std::string buildDacpGet(std::string_view path, std::string_view host, uint16_t port,
                                        std::string_view activeRemote);
+
+/// Sends one-shot DACP control requests to a sender. It resolves
+/// `iTunes_Ctrl_<dacpId>` on `_dacp._tcp` through the injected resolver, then
+/// connects and writes the request. Fire-and-forget: resolve or connect
+/// failures are dropped. Lives on the reactor thread (the resolver's).
+class DacpClient {
+public:
+    explicit DacpClient(platform::IServiceResolver& resolver);
+
+    void send(std::string dacpId, std::string activeRemote, std::string path);
+
+private:
+    platform::IServiceResolver& m_resolver;
+};
 
 } // namespace tapein::core::session

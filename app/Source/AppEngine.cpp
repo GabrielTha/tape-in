@@ -29,6 +29,9 @@ bool AppEngine::start()
     cfg.receiver.hardwareId = m_settings.hardwareId();
     cfg.bufferMode = m_settings.bufferMode();
     cfg.ignoreSenderVolume = m_settings.ignoreSenderVolume();
+    cfg.exclusiveSolo = m_settings.exclusiveSolo();
+    cfg.receiver.requirePassword = m_settings.requirePassword();
+    cfg.receiver.password = m_settings.password().toStdString();
     cfg.receiver.log = [](std::string m) { juce::Logger::writeToLog(m); };
 
     core::session::Engine::ResolverFactory resolverFactory;

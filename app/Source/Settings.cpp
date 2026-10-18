@@ -84,6 +84,39 @@ void Settings::setIgnoreSenderVolume(bool ignore)
     file().saveIfNeeded();
 }
 
+bool Settings::requirePassword() const
+{
+    return file().getBoolValue("requirePassword", false);
+}
+
+void Settings::setRequirePassword(bool require)
+{
+    file().setValue("requirePassword", require);
+    file().saveIfNeeded();
+}
+
+juce::String Settings::password() const
+{
+    return file().getValue("password", "");
+}
+
+void Settings::setPassword(const juce::String& password)
+{
+    file().setValue("password", password);
+    file().saveIfNeeded();
+}
+
+bool Settings::exclusiveSolo() const
+{
+    return file().getBoolValue("exclusiveSolo", false);
+}
+
+void Settings::setExclusiveSolo(bool exclusive)
+{
+    file().setValue("exclusiveSolo", exclusive);
+    file().saveIfNeeded();
+}
+
 bool Settings::startAtLogin() const
 {
     return file().getBoolValue("startAtLogin", false);

@@ -65,7 +65,9 @@ void DacpClient::send(std::string dacpId, std::string activeRemote, std::string 
                            const std::string full = svc.endpoint.toString();
                            const std::string host = full.substr(0, full.rfind(':'));
 
-                           auto sock = net::TcpSocket::connect(svc.endpoint);
+                           // Bounded connect so a resolvable-but-dead sender
+                           // (phone asleep) never stalls the reactor thread.
+                           auto sock = net::TcpSocket::connect(svc.endpoint, std::chrono::milliseconds(300));
                            if (!sock.ok()) {
                                return; // sender unreachable; drop the command
                            }

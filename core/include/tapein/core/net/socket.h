@@ -52,6 +52,10 @@ public:
 
     /// Blocking connect, then switches the socket to non-blocking.
     static Result<TcpSocket> connect(const Endpoint& remote);
+    /// Non-blocking connect bounded by `timeout`, then leaves the socket
+    /// non-blocking. Returns ErrorCode::wouldBlock if the connect did not
+    /// complete in time (so a dead peer never stalls the caller).
+    static Result<TcpSocket> connect(const Endpoint& remote, std::chrono::milliseconds timeout);
 
     Result<size_t> read(std::span<uint8_t> buffer); ///< EOF → ioError
     Result<size_t> write(std::span<const uint8_t> data); ///< may be partial; 0 if would block

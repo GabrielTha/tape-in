@@ -18,6 +18,7 @@
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
@@ -45,6 +46,12 @@ void ensureWinsock()
 int lastError() { return WSAGetLastError(); }
 bool isWouldBlock(int e) { return e == WSAEWOULDBLOCK; }
 bool isInterrupted(int e) { return e == WSAEINTR; }
+bool isInProgress(int e) { return e == WSAEWOULDBLOCK; }
+int pollWritable(NativeHandle h, int timeoutMs)
+{
+    WSAPOLLFD pfd{static_cast<SOCKET>(h), POLLWRNORM, 0};
+    return WSAPoll(&pfd, 1, timeoutMs);
+}
 void closeHandle(NativeHandle h) { closesocket(static_cast<SOCKET>(h)); }
 bool setNonBlocking(NativeHandle h)
 {
@@ -59,6 +66,12 @@ void ensureWinsock() {}
 int lastError() { return errno; }
 bool isWouldBlock(int e) { return e == EWOULDBLOCK || e == EAGAIN; }
 bool isInterrupted(int e) { return e == EINTR; }
+bool isInProgress(int e) { return e == EINPROGRESS; }
+int pollWritable(NativeHandle h, int timeoutMs)
+{
+    pollfd pfd{static_cast<int>(h), POLLOUT, 0};
+    return ::poll(&pfd, 1, timeoutMs);
+}
 void closeHandle(NativeHandle h) { ::close(h); }
 bool setNonBlocking(NativeHandle h)
 {
@@ -228,6 +241,51 @@ Result<TcpSocket> TcpSocket::connect(const Endpoint& remote)
     }
     if (!setNonBlocking(s.m_handle)) {
         return socketError("set non-blocking");
+    }
+    int on = 1;
+    ::setsockopt(static_cast<SockHandle>(s.m_handle), IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&on), sizeof on);
+    return s;
+}
+
+Result<TcpSocket> TcpSocket::connect(const Endpoint& remote, std::chrono::milliseconds timeout)
+{
+    auto h = openSocket(remote.isV6, SOCK_STREAM);
+    if (!h.ok()) {
+        return h.error();
+    }
+    TcpSocket s(h.value());
+    if (!setNonBlocking(s.m_handle)) {
+        return socketError("set non-blocking");
+    }
+    sockaddr_storage ss{};
+    const SockLen len = toSockaddr(remote, ss);
+    if (::connect(static_cast<SockHandle>(s.m_handle), reinterpret_cast<const sockaddr*>(&ss), len) != 0) {
+        const int e = lastError();
+        if (!isInProgress(e)) {
+            return socketError("connect"); // refused / unreachable right away
+        }
+        // Wait, bounded, for the connect to complete.
+        const int ms = timeout.count() > 0 ? static_cast<int>(timeout.count()) : 0;
+        int pr = 0;
+        do {
+            pr = pollWritable(s.m_handle, ms);
+        } while (pr < 0 && isInterrupted(lastError()));
+        if (pr == 0) {
+            return makeError(ErrorCode::wouldBlock, "connect timed out");
+        }
+        if (pr < 0) {
+            return socketError("connect poll");
+        }
+        int soErr = 0;
+        SockLen soLen = sizeof soErr;
+        if (::getsockopt(static_cast<SockHandle>(s.m_handle), SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&soErr),
+                         &soLen)
+                != 0) {
+            return socketError("getsockopt SO_ERROR");
+        }
+        if (soErr != 0) {
+            return makeError(ErrorCode::ioError, "connect failed");
+        }
     }
     int on = 1;
     ::setsockopt(static_cast<SockHandle>(s.m_handle), IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&on), sizeof on);

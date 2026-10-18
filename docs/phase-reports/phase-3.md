@@ -60,10 +60,13 @@ Report what works and what doesn't; that's the Phase 3 gate.
 
 - Remote control targets the sender's DACP server; a sender that doesn't run
   one (or blocks `_dacp._tcp`) simply won't respond — the commands are dropped.
-- The DACP connect is a short blocking connect on the reactor thread; a sender
-  that is resolvable but silently offline could briefly delay the reactor until
-  the OS refuses the connection. Fine on a healthy LAN; revisit with an async
-  connect if it bites.
+- The DACP connect is bounded to 300 ms (a non-blocking connect with a poll
+  timeout), so a resolvable-but-dead sender (phone asleep) delays the reactor
+  by at most that, never the OS connect timeout. The preceding `getaddrinfo`
+  for the sender's `.local` host still runs synchronously on the reactor and
+  is usually cached/instant; a departed host could add a short extra delay.
+  Rapid transport presses can cancel each other (a new resolve supersedes the
+  one in flight) — fine for fire-and-forget.
 - Sending volume *to the sender* (`Engine::setSenderVolumeDb`, DACP
   `dmcp.device-volume`) is implemented in the core but not wired to a UI
   control this phase; the slot fader is local mix gain.

@@ -150,3 +150,27 @@ TEST_CASE("non-blocking read returns zero bytes when nothing is available")
     REQUIRE(r.ok());
     REQUIRE(r.value().first == 0);
 }
+
+TEST_CASE("TcpSocket::connect honours a timeout")
+{
+    using namespace std::chrono_literals;
+
+    // Success: a listening endpoint connects well within the timeout.
+    auto listener = TcpListener::bind(loopbackV4(0));
+    REQUIRE(listener.ok());
+    const auto ep = listener.value().localEndpoint().value();
+    auto ok = TcpSocket::connect(ep, 1000ms);
+    CHECK(ok.ok());
+
+    // Refused: a closed port returns an error quickly, not after the timeout.
+    uint16_t deadPort = 0;
+    {
+        auto l = TcpListener::bind(loopbackV4(0));
+        deadPort = l.value().localEndpoint().value().port;
+    }
+    const auto start = std::chrono::steady_clock::now();
+    auto fail = TcpSocket::connect(loopbackV4(deadPort), 1000ms);
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+    CHECK_FALSE(fail.ok());
+    CHECK(elapsed < 900ms); // returned before the timeout, not blocked
+}

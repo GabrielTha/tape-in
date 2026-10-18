@@ -6,7 +6,7 @@
 
 set(_platform_sources null/null_advertiser.cpp null/null_login_item.cpp null/null_resolver.cpp)
 if(APPLE)
-    list(APPEND _platform_sources macos/dns_sd_advertiser.cpp macos/mac_login_item.mm)
+    list(APPEND _platform_sources macos/dns_sd_advertiser.cpp macos/dns_sd_resolver.cpp macos/mac_login_item.mm)
 endif()
 
 add_library(tapein_platform STATIC ${_platform_sources})

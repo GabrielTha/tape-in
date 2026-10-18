@@ -13,6 +13,7 @@ juce_add_gui_app(TapeIn
     COMPANY_NAME "Tape In contributors"
     COMPANY_COPYRIGHT "Copyright (C) 2026 Tape In contributors, AGPL-3.0-or-later"
     PLIST_TO_MERGE "${_tapein_plist_merge}"
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Resources/images/app_icon.png"
     NEEDS_CURL FALSE
     NEEDS_WEB_BROWSER FALSE)
 

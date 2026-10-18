@@ -4,7 +4,7 @@
 # tapein_platform: per-OS implementations of the core's platform interfaces.
 # Objective-C++ (.mm) is allowed only under platform/macos/.
 
-set(_platform_sources null/null_advertiser.cpp null/null_login_item.cpp)
+set(_platform_sources null/null_advertiser.cpp null/null_login_item.cpp null/null_resolver.cpp)
 if(APPLE)
     list(APPEND _platform_sources macos/dns_sd_advertiser.cpp macos/mac_login_item.mm)
 endif()

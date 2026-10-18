@@ -20,6 +20,7 @@ public:
         bool requirePassword = false;
         juce::String password;
         bool exclusiveSolo = false;
+        bool askBeforeAccept = false;
         juce::String audioDevice;
     };
 
@@ -48,6 +49,7 @@ private:
     std::unique_ptr<CheckBox> m_restrict;
     juce::TextEditor m_password;
     std::unique_ptr<CheckBox> m_exclusive;
+    std::unique_ptr<CheckBox> m_ask;
     std::unique_ptr<Dropdown> m_audio;
     std::unique_ptr<Dropdown> m_out1;
     std::unique_ptr<Dropdown> m_out2;

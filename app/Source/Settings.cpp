@@ -117,6 +117,17 @@ void Settings::setExclusiveSolo(bool exclusive)
     file().saveIfNeeded();
 }
 
+bool Settings::askBeforeAccept() const
+{
+    return file().getBoolValue("askBeforeAccept", true);
+}
+
+void Settings::setAskBeforeAccept(bool ask)
+{
+    file().setValue("askBeforeAccept", ask);
+    file().saveIfNeeded();
+}
+
 bool Settings::startAtLogin() const
 {
     return file().getBoolValue("startAtLogin", false);

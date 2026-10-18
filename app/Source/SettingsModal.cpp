@@ -42,7 +42,7 @@ public:
         auto b = getLocalBounds().toFloat();
         theme::drawRaised(g, b.reduced(1.0f), 10.0f, theme::colours::background);
         g.setColour(inert ? theme::colours::faint : juce::Colour(0xffd3d7dd));
-        g.setFont(juce::FontOptions(13.0f));
+        g.setFont(juce::FontOptions(14.0f));
         g.drawText(m_text, b.withTrimmedLeft(13.0f).withTrimmedRight(30.0f), juce::Justification::centredLeft);
         theme::icons::chevron(g, juce::Rectangle<float>(13, 13).withCentre({b.getRight() - 13.0f, b.getCentreY()}),
                               theme::colours::faint, false);
@@ -57,7 +57,8 @@ SettingsModal::SettingsModal()
     setInterceptsMouseClicks(true, true);
 
     const auto styleField = [](juce::TextEditor& e) {
-        e.setFont(juce::FontOptions(13.0f));
+        e.setFont(juce::FontOptions(14.0f));
+        e.setJustification(juce::Justification::centredLeft);
         e.setColour(juce::TextEditor::backgroundColourId, theme::colours::inset);
         e.setColour(juce::TextEditor::textColourId, theme::colours::text);
         e.setColour(juce::TextEditor::outlineColourId, juce::Colour(0x1affffff));
@@ -80,6 +81,9 @@ SettingsModal::SettingsModal()
 
     m_exclusive = std::make_unique<CheckBox>();
     addAndMakeVisible(*m_exclusive);
+
+    m_ask = std::make_unique<CheckBox>();
+    addAndMakeVisible(*m_ask);
 
     m_audio = std::make_unique<Dropdown>();
     m_audio->onClick = [this] {
@@ -129,6 +133,7 @@ void SettingsModal::setValues(const Values& v)
     m_restrict->setToggleState(v.requirePassword, juce::dontSendNotification);
     m_password.setText(v.password, juce::dontSendNotification);
     m_exclusive->setToggleState(v.exclusiveSolo, juce::dontSendNotification);
+    m_ask->setToggleState(v.askBeforeAccept, juce::dontSendNotification);
     m_audio->setText(v.audioDevice);
     relayout();
 }
@@ -142,6 +147,7 @@ SettingsModal::Values SettingsModal::gather() const
     v.requirePassword = m_restrict->getToggleState();
     v.password = m_password.getText();
     v.exclusiveSolo = m_exclusive->getToggleState();
+    v.askBeforeAccept = m_ask->getToggleState();
     v.audioDevice = m_audio->text();
     return v;
 }
@@ -149,7 +155,7 @@ SettingsModal::Values SettingsModal::gather() const
 juce::Rectangle<int> SettingsModal::cardBounds() const
 {
     const bool pw = m_restrict->getToggleState();
-    const int h = pw ? 460 : 404;
+    const int h = pw ? 546 : 490;
     return juce::Rectangle<int>(28, 56, getWidth() - 56, h);
 }
 
@@ -187,13 +193,16 @@ void SettingsModal::resized()
     if (m_restrict->getToggleState())
         m_password.setBounds(row(40));
     m_exclusive->setBounds(row(40).removeFromLeft(28).withSizeKeepingCentre(28, 28));
+    m_ask->setBounds(row(40).removeFromLeft(28).withSizeKeepingCentre(28, 28));
     m_audio->setBounds(row(40));
     auto outputs = row(40);
     const int half = (outputs.getWidth() - 12) / 2;
     m_out1->setBounds(outputs.removeFromLeft(half));
     m_out2->setBounds(outputs.removeFromRight(half));
 
-    m_save.setBounds(juce::Rectangle<int>(0, 0, 150, 46).withCentre({card.getCentreX(), card.getBottom() - 24 - 23}));
+    a.removeFromTop(8); // breathing room between the Output row and Save
+    auto saveRow = a.removeFromTop(46);
+    m_save.setBounds(juce::Rectangle<int>(0, 0, 150, 46).withCentre(saveRow.getCentre()));
 }
 
 void SettingsModal::paint(juce::Graphics& g)
@@ -204,22 +213,23 @@ void SettingsModal::paint(juce::Graphics& g)
 
     // Title.
     g.setColour(theme::colours::accent);
-    g.setFont(theme::boldonseFont(12.0f));
-    g.drawText("SETTINGS", card.reduced(26, 24).removeFromTop(20), juce::Justification::topLeft);
+    g.setFont(theme::boldonseFont(15.0f));
+    g.drawText("SETTINGS", card.reduced(26, 22).removeFromTop(26), juce::Justification::topLeft);
 
     // Right-aligned labels in the 120px column.
-    g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
-    g.setColour(juce::Colour(0xffaeb4bc));
+    g.setFont(juce::FontOptions(14.0f, juce::Font::bold));
+    g.setColour(juce::Colour(0xffc6ccd3));
     auto labelFor = [&](juce::Component& c, const juce::String& text) {
         auto b = c.getBounds();
         g.drawText(text, juce::Rectangle<int>(card.getX() + 26, b.getY(), 120, b.getHeight()),
-                   juce::Justification::centredRight);
+                   juce::Justification::centredLeft);
     };
     labelFor(m_name, "Network name");
     labelFor(*m_restrict, "Restrict access");
     if (m_password.isVisible())
         labelFor(m_password, "Password");
     labelFor(*m_exclusive, "Exclusive solo");
+    labelFor(*m_ask, "Ask to connect");
     labelFor(*m_audio, "Audio device");
     labelFor(*m_out1, "Output");
 }

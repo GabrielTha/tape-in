@@ -30,6 +30,7 @@ bool AppEngine::start()
     cfg.bufferMode = m_settings.bufferMode();
     cfg.ignoreSenderVolume = m_settings.ignoreSenderVolume();
     cfg.exclusiveSolo = m_settings.exclusiveSolo();
+    cfg.askBeforeAccept = m_settings.askBeforeAccept();
     cfg.receiver.requirePassword = m_settings.requirePassword();
     cfg.receiver.password = m_settings.password().toStdString();
     cfg.receiver.log = [](std::string m) { juce::Logger::writeToLog(m); };

@@ -30,6 +30,8 @@ public:
     std::function<void(uint64_t, bool)> onMute;
     std::function<void(uint64_t, bool)> onSolo;
     std::function<void(uint64_t, core::session::TransportCommand)> onTransport;
+    std::function<void(uint64_t)> onApprove; ///< allow a pending connection
+    std::function<void(uint64_t)> onDecline; ///< reject a pending connection
 
     void resized() override;
     void paint(juce::Graphics& g) override;
@@ -37,10 +39,13 @@ public:
 private:
     class IconButton; ///< small ghost transport button
 
+    void applyControlVisibility(); ///< transport vs. Allow/Decline, by pending state
+
     uint64_t m_sourceId = 0;
     bool m_empty = false;
     bool m_live = true;
     bool m_playing = false;
+    bool m_pending = false; ///< awaiting the user's Allow/Decline
     juce::String m_stateText;
     juce::Colour m_stateColour;
 
@@ -56,6 +61,8 @@ private:
     juce::Slider m_volume;
     juce::TextButton m_solo{"S"};
     juce::TextButton m_mute{"M"};
+    juce::TextButton m_allow{"Allow"};
+    juce::TextButton m_decline{"Decline"};
 };
 
 } // namespace tapein::app

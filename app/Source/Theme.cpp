@@ -111,14 +111,27 @@ void speakerHigh(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c, 
 
 void gear(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c, float stroke)
 {
+    // A proper cog: a toothed ring (teeth on the outer rim, flat tops and
+    // valleys between them) around a central hole — not a sun.
     juce::Path p;
-    p.addEllipse(12 - 3, 12 - 3, 6, 6);
-    for (int i = 0; i < 8; ++i) {
-        const float a = juce::MathConstants<float>::pi * static_cast<float>(i) / 4.0f;
-        const float ca = std::cos(a), sa = std::sin(a);
-        p.startNewSubPath(12 + ca * 6.0f, 12 + sa * 6.0f);
-        p.lineTo(12 + ca * 9.5f, 12 + sa * 9.5f);
+    constexpr int teeth = 8;
+    const float pitch = juce::MathConstants<float>::twoPi / static_cast<float>(teeth);
+    const float cx = 12.0f, cy = 12.0f;
+    const float frac[] = {-0.30f, -0.17f, 0.17f, 0.30f}; // valley, tip, tip, valley
+    const float radius[] = {6.6f, 9.5f, 9.5f, 6.6f};     // inner (root), outer (tip)
+    for (int i = 0; i < teeth; ++i) {
+        for (int k = 0; k < 4; ++k) {
+            const float a = (static_cast<float>(i) + frac[k]) * pitch;
+            const float x = cx + std::cos(a) * radius[k];
+            const float y = cy + std::sin(a) * radius[k];
+            if (i == 0 && k == 0)
+                p.startNewSubPath(x, y);
+            else
+                p.lineTo(x, y);
+        }
     }
+    p.closeSubPath();
+    p.addEllipse(cx - 3.0f, cy - 3.0f, 6.0f, 6.0f); // center hole
     strokeVb(g, box, c, stroke, p);
 }
 

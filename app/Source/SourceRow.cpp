@@ -140,6 +140,36 @@ SourceRow::SourceRow()
         if (onMute)
             onMute(m_sourceId, m_mute.getToggleState());
     };
+
+    // Shown only while a connection is pending approval (ask-before-accept).
+    m_allow.setColour(juce::TextButton::buttonColourId, theme::colours::accent);
+    m_allow.setColour(juce::TextButton::textColourOffId, theme::colours::background);
+    m_allow.onClick = [this] {
+        if (onApprove)
+            onApprove(m_sourceId);
+    };
+    addChildComponent(m_allow);
+
+    m_decline.setColour(juce::TextButton::buttonColourId, theme::colours::slot);
+    m_decline.setColour(juce::TextButton::textColourOffId, theme::colours::muted);
+    m_decline.onClick = [this] {
+        if (onDecline)
+            onDecline(m_sourceId);
+    };
+    addChildComponent(m_decline);
+}
+
+void SourceRow::applyControlVisibility()
+{
+    const bool controls = !m_pending; // empty slots still show the (disabled) transport
+    m_prev->setVisible(controls);
+    m_play->setVisible(controls);
+    m_next->setVisible(controls);
+    m_volume.setVisible(controls);
+    m_solo.setVisible(controls);
+    m_mute.setVisible(controls);
+    m_allow.setVisible(m_pending);
+    m_decline.setVisible(m_pending);
 }
 
 SourceRow::~SourceRow() = default;
@@ -147,6 +177,7 @@ SourceRow::~SourceRow() = default;
 void SourceRow::setEmpty()
 {
     m_empty = true;
+    m_pending = false;
     m_sourceId = 0;
     m_live = false;
     m_playing = false;
@@ -154,16 +185,17 @@ void SourceRow::setEmpty()
     m_artwork = juce::Image();
     m_artworkSize = 0;
     m_title.setText("Slot", juce::dontSendNotification);
-    m_title.setColour(juce::Label::textColourId, theme::colours::faint);
-    m_subtitle.setText("// waiting for a device", juce::dontSendNotification);
-    m_subtitle.setColour(juce::Label::textColourId, theme::colours::dim);
+    m_title.setColour(juce::Label::textColourId, theme::colours::muted);
+    m_subtitle.setText("Waiting for a device", juce::dontSendNotification);
+    m_subtitle.setColour(juce::Label::textColourId, theme::colours::faint);
     m_play->setGlyph(IconButton::Glyph::play);
     for (auto* b : {m_prev.get(), m_play.get(), m_next.get()})
         b->setEnabled(false);
     m_volume.setEnabled(false);
     m_solo.setEnabled(false);
     m_mute.setEnabled(false);
-    setAlpha(0.6f);
+    applyControlVisibility();
+    setAlpha(0.72f);
     repaint();
 }
 
@@ -219,7 +251,17 @@ void SourceRow::update(const core::session::SourceSnapshot& snap)
     m_volume.setEnabled(true);
     m_solo.setEnabled(true);
     m_mute.setEnabled(true);
-    setAlpha(snap.live || hasRemote ? 1.0f : 0.68f);
+
+    m_pending = snap.pending;
+    if (m_pending) {
+        const juce::String device = snap.clientName.empty() ? juce::String(snap.peer) : juce::String(snap.clientName);
+        m_title.setColour(juce::Label::textColourId, theme::colours::text);
+        m_title.setText(device, juce::dontSendNotification);
+        m_subtitle.setColour(juce::Label::textColourId, theme::colours::muted);
+        m_subtitle.setText("Wants to connect", juce::dontSendNotification);
+    }
+    applyControlVisibility();
+    setAlpha(m_pending || snap.live || hasRemote ? 1.0f : 0.68f);
     repaint();
 }
 
@@ -234,14 +276,26 @@ void SourceRow::resized()
     m_mute.setBounds(sm.removeFromTop(26));
     r.removeFromRight(13);
 
-    // Top area: title + subtitle (state painted top-right).
+    // Top area: title + subtitle. The state tag sits on the title line only
+    // (y 20..34), so reserve its space on the title row and let the subtitle
+    // use the full width — otherwise long captions truncate with an ellipsis.
     auto top = r.removeFromTop(40);
-    top.removeFromRight(92); // reserved for the state tag
-    m_title.setBounds(top.removeFromTop(20));
+    auto titleRow = top.removeFromTop(20);
+    titleRow.removeFromRight(92); // reserved for the state tag
+    m_title.setBounds(titleRow);
     m_subtitle.setBounds(top.removeFromTop(16));
 
     // Controls row along the bottom of the mid column.
     auto ctrls = r.removeFromBottom(34);
+
+    // Allow / Decline share the full controls row (shown only when pending).
+    {
+        auto pr = ctrls;
+        const int bw = (pr.getWidth() - 12) / 2;
+        m_decline.setBounds(pr.removeFromLeft(bw).withSizeKeepingCentre(bw, 30));
+        m_allow.setBounds(pr.removeFromRight(bw).withSizeKeepingCentre(bw, 30));
+    }
+
     m_prev->setBounds(ctrls.removeFromLeft(32).withSizeKeepingCentre(32, 32));
     ctrls.removeFromLeft(10);
     m_play->setBounds(ctrls.removeFromLeft(38).withSizeKeepingCentre(38, 38));
@@ -273,21 +327,23 @@ void SourceRow::paint(juce::Graphics& g)
                     juce::RectanglePlacement::centred | juce::RectanglePlacement::fillDestination);
         g.restoreState();
     } else if (m_empty) {
-        theme::icons::stack(g, juce::Rectangle<float>(22, 22).withCentre(art.getCentre()), theme::colours::dim);
+        theme::icons::stack(g, juce::Rectangle<float>(22, 22).withCentre(art.getCentre()), theme::colours::faint);
     } else {
         theme::icons::reel(g, juce::Rectangle<float>(24, 24).withCentre(art.getCentre()),
                            juce::Colour(0xff5c6672), 1.5f);
     }
 
     // State tag (dot + coloured text, no background), top-right of the mid area.
-    if (!m_empty && m_stateText.isNotEmpty()) {
+    const juce::String tagText = m_pending ? juce::String("Pending") : m_stateText;
+    const juce::Colour tagColour = m_pending ? theme::colours::accent : m_stateColour;
+    if ((m_pending || !m_empty) && tagText.isNotEmpty()) {
         g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-        const float tw = juce::GlyphArrangement::getStringWidth(g.getCurrentFont(), m_stateText);
+        const float tw = juce::GlyphArrangement::getStringWidth(g.getCurrentFont(), tagText);
         const float right = static_cast<float>(getWidth()) - 14.0f - 30.0f - 13.0f;
         auto tag = juce::Rectangle<float>(right - tw, 20.0f, tw, 14.0f);
-        g.setColour(m_stateColour);
+        g.setColour(tagColour);
         g.fillEllipse(tag.getX() - 13.0f, tag.getCentreY() - 3.0f, 6.0f, 6.0f);
-        g.drawText(m_stateText, tag, juce::Justification::centredLeft);
+        g.drawText(tagText, tag, juce::Justification::centredLeft);
     }
 
     // Dashed separator above the empty-slot caption.
@@ -299,7 +355,11 @@ void SourceRow::paint(juce::Graphics& g)
         g.drawDashedLine({{sub.getX(), y}, {sub.getRight(), y}}, dash, 2, 1.0f);
     }
 
-    // Speaker glyphs flanking the volume slider.
+    // Speaker glyphs flanking the volume slider (hidden while pending, when the
+    // volume fader is replaced by Allow/Decline).
+    if (m_pending) {
+        return;
+    }
     const auto vb = m_volume.getBounds().toFloat();
     const juce::Colour spk = m_empty || !m_live ? theme::colours::dim : theme::colours::faint;
     theme::icons::speakerLow(g, juce::Rectangle<float>(15, 15).withCentre({vb.getX() - 10.0f, vb.getCentreY()}), spk);

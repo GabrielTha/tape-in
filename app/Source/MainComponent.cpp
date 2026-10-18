@@ -136,6 +136,7 @@ void MainComponent::openSettings(bool open)
         v.requirePassword = m_settings.requirePassword();
         v.password = m_settings.password();
         v.exclusiveSolo = m_settings.exclusiveSolo();
+        v.askBeforeAccept = m_settings.askBeforeAccept();
         v.audioDevice = m_app.audio().currentOutputName();
         m_modal.setAudioDevices(m_app.audio().outputDeviceNames());
         m_modal.setValues(v);
@@ -158,6 +159,9 @@ void MainComponent::applySettings(const SettingsModal::Values& v)
 
     m_app.engine()->setExclusiveSolo(v.exclusiveSolo);
     m_settings.setExclusiveSolo(v.exclusiveSolo);
+
+    m_app.engine()->setAskBeforeAccept(v.askBeforeAccept);
+    m_settings.setAskBeforeAccept(v.askBeforeAccept);
 
     if (v.audioDevice.isNotEmpty() && v.audioDevice != m_app.audio().currentOutputName()) {
         m_app.audio().selectOutput(v.audioDevice);
@@ -182,6 +186,8 @@ void MainComponent::rebuildRows(const std::vector<core::session::SourceSnapshot>
             row->onTransport = [this](uint64_t id, core::session::TransportCommand cmd) {
                 m_app.engine()->sendTransportCommand(id, cmd);
             };
+            row->onApprove = [this](uint64_t id) { m_app.engine()->approveConnection(id); };
+            row->onDecline = [this](uint64_t id) { m_app.engine()->declineConnection(id); };
             m_rowHost.addAndMakeVisible(*row);
             m_rows.push_back(std::move(row));
         }
@@ -248,8 +254,11 @@ void MainComponent::resized()
     }
     m_status.setBounds(footer.withTrimmedLeft(10));
 
-    // Source list.
-    auto list = r.reduced(18, 0).withTrimmedTop(2);
+    // Source list. Trim the top so the header-to-first-slot gap matches the
+    // inter-slot gap: slots are kRowHeight apart with a (kRowHeight - rowH) +
+    // 3px card inset = 16px visible gap; the first card has one 3px inset, so
+    // trim 13 to reach the same 16px below the header.
+    auto list = r.reduced(18, 0).withTrimmedTop(13);
     m_viewport.setBounds(list);
     m_rowHost.setSize(m_viewport.getWidth() - 8,
                       std::max(list.getHeight(), static_cast<int>(m_rows.size()) * kRowHeight));

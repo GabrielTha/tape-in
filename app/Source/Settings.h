@@ -40,6 +40,10 @@ public:
     [[nodiscard]] bool exclusiveSolo() const;
     void setExclusiveSolo(bool exclusive);
 
+    /// Ask to allow each new device before its audio plays.
+    [[nodiscard]] bool askBeforeAccept() const;
+    void setAskBeforeAccept(bool ask);
+
     [[nodiscard]] bool startAtLogin() const;
     void setStartAtLogin(bool enabled);
 

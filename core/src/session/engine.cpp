@@ -27,7 +27,7 @@ float raopVolumeDbToGain(float dB) noexcept
 
 
 Engine::Engine(EngineConfig config, platform::IServiceAdvertiser& advertiser, std::shared_ptr<crypto::RaopRsaKey> key,
-               net::Reactor* externalReactor)
+               net::Reactor* externalReactor, ResolverFactory resolverFactory)
     : m_config(std::move(config)), m_advertiser(advertiser), m_key(std::move(key)),
       m_ownsReactor(externalReactor == nullptr),
       m_mixer(static_cast<uint32_t>(std::max<size_t>(1, m_config.receiver.maxSessions)), dsp::SourceStream::kDefaultMaxBlock)
@@ -37,6 +37,12 @@ Engine::Engine(EngineConfig config, platform::IServiceAdvertiser& advertiser, st
         m_reactor = m_ownReactor.get();
     } else {
         m_reactor = externalReactor;
+    }
+    if (resolverFactory) {
+        m_resolver = resolverFactory(*m_reactor);
+        if (m_resolver) {
+            m_dacp = std::make_unique<DacpClient>(*m_resolver);
+        }
     }
     m_name = util::clampUtf8(m_config.receiver.name, 63);
     if (m_name.empty()) {
@@ -262,6 +268,42 @@ void Engine::setSolo(uint64_t sourceId, bool solo)
             src->stream->params().solo.store(solo, std::memory_order_relaxed);
         }
     }
+}
+
+void Engine::sendTransportCommand(uint64_t sourceId, TransportCommand cmd)
+{
+    runOnReactor([this, sourceId, cmd] {
+        std::string dacpId;
+        std::string activeRemote;
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            Source* src = byId(sourceId);
+            if (src == nullptr || !src->live || src->info.activeRemote.empty() || !m_dacp) {
+                return;
+            }
+            dacpId = src->info.dacpId;
+            activeRemote = src->info.activeRemote;
+        }
+        m_dacp->send(dacpId, activeRemote, dacpPath(cmd));
+    });
+}
+
+void Engine::setSenderVolumeDb(uint64_t sourceId, float dB)
+{
+    runOnReactor([this, sourceId, dB] {
+        std::string dacpId;
+        std::string activeRemote;
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            Source* src = byId(sourceId);
+            if (src == nullptr || !src->live || src->info.activeRemote.empty() || !m_dacp) {
+                return;
+            }
+            dacpId = src->info.dacpId;
+            activeRemote = src->info.activeRemote;
+        }
+        m_dacp->send(dacpId, activeRemote, dacpVolumePath(dB));
+    });
 }
 
 Engine::Source* Engine::bySession(uint64_t sessionId) noexcept

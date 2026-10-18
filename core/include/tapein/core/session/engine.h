@@ -8,6 +8,8 @@
 #include "tapein/core/dsp/source_stream.h"
 #include "tapein/core/net/reactor.h"
 #include "tapein/core/platform/service_advertiser.h"
+#include "tapein/core/platform/service_resolver.h"
+#include "tapein/core/session/dacp_client.h"
 #include "tapein/core/session/pcm_sink.h"
 #include "tapein/core/session/receiver.h"
 #include "tapein/core/util/result.h"
@@ -15,6 +17,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -87,10 +90,14 @@ float raopVolumeDbToGain(float dB) noexcept;
 /// end makes the source linger before removal.
 class Engine final : public IPcmSink {
 public:
+    /// Builds the DACP resolver bound to the engine's reactor. Supplied by the
+    /// app (a platform impl); nullptr disables remote control.
+    using ResolverFactory = std::function<std::unique_ptr<platform::IServiceResolver>(net::Reactor&)>;
+
     /// externalReactor != nullptr: the caller runs the reactor (tests).
     /// nullptr: the engine owns a network thread between start() and stop().
     Engine(EngineConfig config, platform::IServiceAdvertiser& advertiser, std::shared_ptr<crypto::RaopRsaKey> key,
-           net::Reactor* externalReactor = nullptr);
+           net::Reactor* externalReactor = nullptr, ResolverFactory resolverFactory = nullptr);
     ~Engine() override;
     Engine(const Engine&) = delete;
     Engine& operator=(const Engine&) = delete;
@@ -105,6 +112,11 @@ public:
     void setUserGainDb(uint64_t sourceId, float dB);
     void setMute(uint64_t sourceId, bool mute);
     void setSolo(uint64_t sourceId, bool solo);
+
+    /// Remote control sent back to the sender over DACP. A no-op for a source
+    /// that is not live, has no Active-Remote, or when no resolver was supplied.
+    void sendTransportCommand(uint64_t sourceId, TransportCommand cmd);
+    void setSenderVolumeDb(uint64_t sourceId, float dB);
 
     [[nodiscard]] std::vector<SourceSnapshot> sources() const;
     [[nodiscard]] std::vector<EngineEvent> pollEvents();
@@ -181,6 +193,11 @@ private:
     bool m_running = false;
     bool m_gcScheduled = false;
     net::Reactor::TimerId m_statsTimer = 0;
+
+    // Remote control. Declared last so they destruct before the reactor they
+    // were bound to; m_dacp holds a reference into m_resolver, so it is last.
+    std::unique_ptr<platform::IServiceResolver> m_resolver;
+    std::unique_ptr<DacpClient> m_dacp;
 };
 
 } // namespace tapein::core::session

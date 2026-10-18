@@ -6,8 +6,10 @@
 
 #include "tapein/core/crypto/raop_key.h"
 #include "tapein/core/net/reactor.h"
+#include "tapein/core/net/socket.h"
 #include "tapein/core/session/engine.h"
 #include "tapein/platform/null_advertiser.h"
+#include "tapein/platform/null_resolver.h"
 #include "support/raop_client.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -36,7 +38,7 @@ struct Fixture {
     std::unique_ptr<Engine> engine;
 
     explicit Fixture(BufferMode mode = BufferMode::monitoring, uint16_t holdBack = 2,
-                     std::chrono::milliseconds linger = 300ms)
+                     std::chrono::milliseconds linger = 300ms, Engine::ResolverFactory factory = nullptr)
     {
         EngineConfig cfg;
         cfg.receiver.name = "Tape In Test";
@@ -47,7 +49,7 @@ struct Fixture {
         cfg.lingerTime = linger;
         cfg.ringFrames = 1u << 16;
         cfg.quality = dsp::ResamplerQuality::fastest;
-        engine = std::make_unique<Engine>(std::move(cfg), advertiser, key, &reactor);
+        engine = std::make_unique<Engine>(std::move(cfg), advertiser, key, &reactor, std::move(factory));
         REQUIRE(engine->start().ok());
         REQUIRE(engine->rtspPort() != 0);
     }
@@ -206,6 +208,91 @@ TEST_CASE("now-playing metadata and progress reach the source snapshot")
         }
     }
     CHECK(sawChanged);
+}
+
+TEST_CASE("sendTransportCommand resolves and sends a DACP GET with the source's Active-Remote")
+{
+    using tapein::core::platform::ResolvedService;
+    using tapein::platform::NullServiceResolver;
+
+    // A capturing server stands in for the sender's DACP control port.
+    auto listener = net::TcpListener::bind(loopback(0)).value();
+    const uint16_t dacpPort = listener.localEndpoint().value().port;
+    ResolvedService svc{"iTunes_Ctrl_X", "host.local.", loopback(dacpPort)};
+
+    Fixture fx(BufferMode::monitoring, 2, 300ms, [svc](net::Reactor&) -> std::unique_ptr<tapein::core::platform::IServiceResolver> {
+        return std::make_unique<NullServiceResolver>(Result<ResolvedService>(svc));
+    });
+
+    std::string captured;
+    std::optional<net::TcpSocket> accepted;
+    fx.reactor.add(listener.handle(), [&] {
+        auto s = listener.accept();
+        if (s.ok()) {
+            accepted.emplace(std::move(s.value()));
+            fx.reactor.add(accepted->handle(), [&] {
+                std::array<uint8_t, 512> buf{};
+                auto n = accepted->read(buf);
+                if (n.ok() && n.value() > 0)
+                    captured.append(reinterpret_cast<const char*>(buf.data()), n.value());
+            });
+        }
+    });
+
+    auto c = fx.client();
+    REQUIRE(c.startStream(true).status == 200);
+    REQUIRE(fx.pumpUntil([&] { return !fx.engine->sources().empty(); }));
+    const auto id = onlySource(fx).sourceId;
+
+    fx.engine->sendTransportCommand(id, TransportCommand::next);
+    REQUIRE(fx.pumpUntil([&] { return !captured.empty(); }));
+    CHECK(captured.find("GET /ctrl-int/1/nextitem ") != std::string::npos);
+    CHECK(captured.find("Active-Remote: 424242") != std::string::npos);
+
+    fx.reactor.remove(listener.handle());
+}
+
+TEST_CASE("sendTransportCommand to an ended source sends nothing")
+{
+    using tapein::core::platform::ResolvedService;
+    using tapein::platform::NullServiceResolver;
+
+    auto listener = net::TcpListener::bind(loopback(0)).value();
+    const uint16_t dacpPort = listener.localEndpoint().value().port;
+    ResolvedService svc{"iTunes_Ctrl_X", "host.local.", loopback(dacpPort)};
+
+    Fixture fx(BufferMode::monitoring, 2, 2000ms, [svc](net::Reactor&) -> std::unique_ptr<tapein::core::platform::IServiceResolver> {
+        return std::make_unique<NullServiceResolver>(Result<ResolvedService>(svc));
+    });
+
+    std::string captured;
+    std::optional<net::TcpSocket> accepted;
+    fx.reactor.add(listener.handle(), [&] {
+        auto s = listener.accept();
+        if (s.ok()) {
+            accepted.emplace(std::move(s.value()));
+            fx.reactor.add(accepted->handle(), [&] {
+                std::array<uint8_t, 512> buf{};
+                auto n = accepted->read(buf);
+                if (n.ok() && n.value() > 0)
+                    captured.append(reinterpret_cast<const char*>(buf.data()), n.value());
+            });
+        }
+    });
+
+    auto c = fx.client();
+    REQUIRE(c.startStream(true).status == 200);
+    REQUIRE(fx.pumpUntil([&] { return !fx.engine->sources().empty(); }));
+    const auto id = onlySource(fx).sourceId;
+
+    REQUIRE(c.request("TEARDOWN", "Session: 1\r\n").status == 200);
+    REQUIRE(fx.pumpUntil([&] { return !onlySource(fx).live; })); // lingering, not live
+
+    fx.engine->sendTransportCommand(id, TransportCommand::playPause);
+    fx.pump(100ms);
+    CHECK(captured.empty());
+
+    fx.reactor.remove(listener.handle());
 }
 
 TEST_CASE("teardown leaves the source lingering, then removes it with an event")

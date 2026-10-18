@@ -210,13 +210,16 @@ void SourceRow::update(const core::session::SourceSnapshot& snap)
     m_mute.setToggleState(snap.mute, juce::dontSendNotification);
     m_solo.setToggleState(snap.solo, juce::dontSendNotification);
 
-    const bool enabled = snap.live;
+    // Transport stays available whenever the sender is remote-controllable
+    // (DACP-ID + Active-Remote), even while paused and not live, so play can
+    // resume it. The local gain is always ours to set.
+    const bool hasRemote = !snap.dacpId.empty() && !snap.activeRemote.empty();
     for (auto* b : {m_prev.get(), m_play.get(), m_next.get()})
-        b->setEnabled(enabled);
-    m_volume.setEnabled(enabled);
+        b->setEnabled(hasRemote);
+    m_volume.setEnabled(true);
     m_solo.setEnabled(true);
     m_mute.setEnabled(true);
-    setAlpha(snap.live ? 1.0f : 0.68f);
+    setAlpha(snap.live || hasRemote ? 1.0f : 0.68f);
     repaint();
 }
 
@@ -263,6 +266,9 @@ void SourceRow::paint(juce::Graphics& g)
         clip.addRoundedRectangle(art.reduced(1.5f), 11.5f);
         g.saveState();
         g.reduceClipRegion(clip);
+        // drawImage uses the context's current opacity; earlier shadow fills
+        // leave it below 1, so reset to full white before drawing the artwork.
+        g.setColour(juce::Colours::white);
         g.drawImage(m_artwork, art.reduced(1.5f),
                     juce::RectanglePlacement::centred | juce::RectanglePlacement::fillDestination);
         g.restoreState();

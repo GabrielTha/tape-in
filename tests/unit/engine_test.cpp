@@ -252,7 +252,7 @@ TEST_CASE("sendTransportCommand resolves and sends a DACP GET with the source's 
     fx.reactor.remove(listener.handle());
 }
 
-TEST_CASE("sendTransportCommand to an ended source sends nothing")
+TEST_CASE("transport still reaches a paused source via its Active-Remote, but not an unknown one")
 {
     using tapein::core::platform::ResolvedService;
     using tapein::platform::NullServiceResolver;
@@ -285,10 +285,19 @@ TEST_CASE("sendTransportCommand to an ended source sends nothing")
     REQUIRE(fx.pumpUntil([&] { return !fx.engine->sources().empty(); }));
     const auto id = onlySource(fx).sourceId;
 
+    // The sender pauses: it tears the RAOP audio session down, so the source
+    // goes not-live and lingers, but its DACP control channel stays reachable.
     REQUIRE(c.request("TEARDOWN", "Session: 1\r\n").status == 200);
     REQUIRE(fx.pumpUntil([&] { return !onlySource(fx).live; })); // lingering, not live
 
+    // Play must still be forwarded so the sender can resume playback.
     fx.engine->sendTransportCommand(id, TransportCommand::playPause);
+    REQUIRE(fx.pumpUntil([&] { return !captured.empty(); }));
+    CHECK(captured.find("GET /ctrl-int/1/playpause ") != std::string::npos);
+
+    // An unknown source id addresses no one.
+    captured.clear();
+    fx.engine->sendTransportCommand(id + 9999, TransportCommand::playPause);
     fx.pump(100ms);
     CHECK(captured.empty());
 

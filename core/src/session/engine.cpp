@@ -311,7 +311,11 @@ void Engine::sendTransportCommand(uint64_t sourceId, TransportCommand cmd)
         {
             std::lock_guard<std::mutex> lock(m_mutex);
             Source* src = byId(sourceId);
-            if (src == nullptr || !src->live || src->info.activeRemote.empty() || !m_dacp) {
+            // Remote control stays available while the source is known and
+            // addressable, even when not live: a paused sender tears the audio
+            // session down but keeps its DACP control channel, so play must
+            // still reach it to resume.
+            if (src == nullptr || src->info.activeRemote.empty() || !m_dacp) {
                 return;
             }
             dacpId = src->info.dacpId;

@@ -56,14 +56,24 @@ SettingsModal::SettingsModal()
 {
     setInterceptsMouseClicks(true, true);
 
-    m_name.setFont(juce::FontOptions(13.0f));
+    const auto styleField = [](juce::TextEditor& e) {
+        e.setFont(juce::FontOptions(13.0f));
+        e.setColour(juce::TextEditor::backgroundColourId, theme::colours::inset);
+        e.setColour(juce::TextEditor::textColourId, theme::colours::text);
+        e.setColour(juce::TextEditor::outlineColourId, juce::Colour(0x1affffff));
+        e.setColour(juce::TextEditor::focusedOutlineColourId, theme::colours::accent.withAlpha(0.75f));
+        e.setColour(juce::TextEditor::highlightColourId, theme::colours::accent.withAlpha(0.3f));
+        e.setColour(juce::CaretComponent::caretColourId, theme::colours::accent);
+    };
+
+    styleField(m_name);
     addAndMakeVisible(m_name);
 
     m_restrict = std::make_unique<CheckBox>();
     m_restrict->onClick = [this] { relayout(); };
     addAndMakeVisible(*m_restrict);
 
-    m_password.setFont(juce::FontOptions(13.0f));
+    styleField(m_password);
     m_password.setPasswordCharacter(static_cast<juce::juce_wchar>(0x2022));
     m_password.setTextToShowWhenEmpty("Password", theme::colours::faint);
     addChildComponent(m_password);
@@ -139,7 +149,7 @@ SettingsModal::Values SettingsModal::gather() const
 juce::Rectangle<int> SettingsModal::cardBounds() const
 {
     const bool pw = m_restrict->getToggleState();
-    const int h = pw ? 436 : 380;
+    const int h = pw ? 460 : 404;
     return juce::Rectangle<int>(28, 56, getWidth() - 56, h);
 }
 
@@ -173,10 +183,10 @@ void SettingsModal::resized()
     };
 
     m_name.setBounds(row(40));
-    m_restrict->setBounds(row(28).removeFromLeft(28));
+    m_restrict->setBounds(row(40).removeFromLeft(28).withSizeKeepingCentre(28, 28));
     if (m_restrict->getToggleState())
         m_password.setBounds(row(40));
-    m_exclusive->setBounds(row(28).removeFromLeft(28));
+    m_exclusive->setBounds(row(40).removeFromLeft(28).withSizeKeepingCentre(28, 28));
     m_audio->setBounds(row(40));
     auto outputs = row(40);
     const int half = (outputs.getWidth() - 12) / 2;

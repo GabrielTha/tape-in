@@ -35,6 +35,7 @@ struct EngineConfig {
     ReceiverConfig receiver;
     BufferMode bufferMode = BufferMode::senderSync;
     bool ignoreSenderVolume = false;
+    bool exclusiveSolo = false; ///< soloing one source clears solo on the others
     dsp::ResamplerQuality quality = dsp::ResamplerQuality::medium;
     std::chrono::milliseconds lingerTime{30000};
     uint32_t ringFrames = 262144; ///< ≈ 5.9 s at 44.1 kHz, power of two
@@ -108,6 +109,11 @@ public:
     void setName(std::string name);
     void setBufferMode(BufferMode mode);
     void setIgnoreSenderVolume(bool ignore);
+    /// "Restrict access": advertise and require an RTSP password (empty
+    /// password disables it even when enabled). Rebuilds the receiver.
+    void setRequirePassword(bool require, std::string password);
+    /// When true, enabling solo on one source clears it on the others.
+    void setExclusiveSolo(bool exclusive);
 
     void setUserGainDb(uint64_t sourceId, float dB);
     void setMute(uint64_t sourceId, bool mute);

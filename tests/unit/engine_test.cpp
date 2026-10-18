@@ -556,3 +556,92 @@ TEST_CASE("owned reactor: concurrent reads with churn are race-free")
     }
     SUCCEED("no crash or sanitizer report");
 }
+
+namespace {
+std::vector<uint64_t> sourceIds(Fixture& fx)
+{
+    std::vector<uint64_t> ids;
+    for (const auto& s : fx.engine->sources()) {
+        ids.push_back(s.sourceId);
+    }
+    return ids;
+}
+bool soloOf(Fixture& fx, uint64_t id)
+{
+    for (const auto& s : fx.engine->sources()) {
+        if (s.sourceId == id) {
+            return s.solo;
+        }
+    }
+    return false;
+}
+} // namespace
+
+TEST_CASE("exclusive solo clears solo on the other sources")
+{
+    Fixture fx;
+    fx.engine->setExclusiveSolo(true);
+    auto a = fx.client();
+    REQUIRE(a.startStream(true).status == 200);
+    REQUIRE(fx.pumpUntil([&] { return fx.engine->sources().size() == 1; }));
+    auto b = fx.client();
+    REQUIRE(b.startStream(true).status == 200);
+    REQUIRE(fx.pumpUntil([&] { return fx.engine->sources().size() == 2; }));
+
+    const auto ids = sourceIds(fx);
+    REQUIRE(ids.size() == 2);
+    const uint64_t idA = ids[0], idB = ids[1];
+
+    fx.engine->setSolo(idA, true);
+    CHECK(soloOf(fx, idA));
+    fx.engine->setSolo(idB, true); // exclusive → clears A
+    CHECK_FALSE(soloOf(fx, idA));
+    CHECK(soloOf(fx, idB));
+}
+
+TEST_CASE("non-exclusive solo lets several sources solo at once")
+{
+    Fixture fx; // exclusiveSolo defaults false
+    auto a = fx.client();
+    REQUIRE(a.startStream(true).status == 200);
+    REQUIRE(fx.pumpUntil([&] { return fx.engine->sources().size() == 1; }));
+    auto b = fx.client();
+    REQUIRE(b.startStream(true).status == 200);
+    REQUIRE(fx.pumpUntil([&] { return fx.engine->sources().size() == 2; }));
+
+    const auto ids = sourceIds(fx);
+    REQUIRE(ids.size() == 2);
+    fx.engine->setSolo(ids[0], true);
+    fx.engine->setSolo(ids[1], true);
+    CHECK(soloOf(fx, ids[0]));
+    CHECK(soloOf(fx, ids[1]));
+}
+
+TEST_CASE("setRequirePassword re-advertises pw=true")
+{
+    Fixture fx;
+    fx.engine->setRequirePassword(true, "hunter2");
+    REQUIRE(fx.pumpUntil([&] {
+        if (fx.advertiser.published.empty()) {
+            return false;
+        }
+        const auto& rec = fx.advertiser.published.back();
+        for (const auto& [k, v] : rec.txt) {
+            if (k == "pw") {
+                return v == "true";
+            }
+        }
+        return false;
+    }));
+    // An empty password disables it again.
+    fx.engine->setRequirePassword(true, "");
+    REQUIRE(fx.pumpUntil([&] {
+        const auto& rec = fx.advertiser.published.back();
+        for (const auto& [k, v] : rec.txt) {
+            if (k == "pw") {
+                return v == "false";
+            }
+        }
+        return false;
+    }));
+}

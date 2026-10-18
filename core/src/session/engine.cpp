@@ -237,6 +237,25 @@ void Engine::setIgnoreSenderVolume(bool ignore)
     }
 }
 
+void Engine::setRequirePassword(bool require, std::string password)
+{
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_config.receiver.requirePassword == require && m_config.receiver.password == password) {
+            return;
+        }
+        m_config.receiver.requirePassword = require;
+        m_config.receiver.password = std::move(password);
+    }
+    rebuildReceiver();
+}
+
+void Engine::setExclusiveSolo(bool exclusive)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_config.exclusiveSolo = exclusive;
+}
+
 void Engine::setUserGainDb(uint64_t sourceId, float dB)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -262,10 +281,24 @@ void Engine::setMute(uint64_t sourceId, bool mute)
 void Engine::setSolo(uint64_t sourceId, bool solo)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (Source* src = byId(sourceId)) {
-        src->solo = solo;
-        if (src->stream != nullptr) {
-            src->stream->params().solo.store(solo, std::memory_order_relaxed);
+    Source* src = byId(sourceId);
+    if (src == nullptr) {
+        return;
+    }
+    src->solo = solo;
+    if (src->stream != nullptr) {
+        src->stream->params().solo.store(solo, std::memory_order_relaxed);
+    }
+    // Exclusive solo: enabling one clears every other source.
+    if (solo && m_config.exclusiveSolo) {
+        for (auto& [dacp, other] : m_sources) {
+            if (other.get() == src) {
+                continue;
+            }
+            other->solo = false;
+            if (other->stream != nullptr) {
+                other->stream->params().solo.store(false, std::memory_order_relaxed);
+            }
         }
     }
 }

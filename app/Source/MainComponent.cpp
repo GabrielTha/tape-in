@@ -266,22 +266,15 @@ void MainComponent::paint(juce::Graphics& g)
 {
     g.fillAll(theme::colours::background);
 
-    // Brand: reel mark + Boldonse wordmark + "RECEIVER".
+    // Brand: the "TAPE IN" cassette wordmark logo.
     const float cy = 32.0f;
-    auto reel = juce::Rectangle<float>(18.0f, cy - 13.0f, 26.0f, 26.0f);
-    theme::drawRaised(g, reel, 8.0f, theme::colours::background);
-    theme::icons::reel(g, juce::Rectangle<float>(15, 15).withCentre(reel.getCentre()), theme::colours::accent, 1.7f);
-
-    g.setColour(theme::colours::text);
-    const auto word = theme::boldonseFont(12.0f);
-    g.setFont(word);
-    const juce::String brand = "TAPE IN";
-    const float bw = juce::GlyphArrangement::getStringWidth(word, brand);
-    g.drawText(brand, juce::Rectangle<float>(52.0f, cy - 8.0f, bw + 4.0f, 16.0f), juce::Justification::centredLeft);
-    g.setColour(theme::colours::faint);
-    g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
-    g.drawText("RECEIVER", juce::Rectangle<float>(52.0f + bw + 9.0f, cy - 7.0f, 70.0f, 14.0f),
-               juce::Justification::centredLeft);
+    if (const auto& brand = theme::logo(); brand.isValid()) {
+        const float logoH = 30.0f;
+        const float logoW = logoH * static_cast<float>(brand.getWidth()) / static_cast<float>(brand.getHeight());
+        g.setColour(juce::Colours::white); // full opacity for the image draw
+        g.drawImage(brand, juce::Rectangle<float>(18.0f, cy - logoH / 2.0f, logoW, logoH),
+                    juce::RectanglePlacement::centred);
+    }
 
     // Separator under the top bar.
     g.setColour(juce::Colour(0x0affffff));

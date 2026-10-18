@@ -19,6 +19,13 @@ juce::Font boldonseFont(float height)
     return juce::Font(boldonse()).withHeight(height);
 }
 
+const juce::Image& logo()
+{
+    static juce::Image img =
+        juce::ImageFileFormat::loadFrom(BinaryData::tapein_logo_png, BinaryData::tapein_logo_pngSize);
+    return img;
+}
+
 void drawRaised(juce::Graphics& g, juce::Rectangle<float> bounds, float radius, juce::Colour fill)
 {
     // Dark shadow bottom-right.

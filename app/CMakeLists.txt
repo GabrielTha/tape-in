@@ -16,7 +16,9 @@ juce_add_gui_app(TapeIn
     NEEDS_CURL FALSE
     NEEDS_WEB_BROWSER FALSE)
 
-juce_add_binary_data(TapeInData SOURCES Resources/fonts/Boldonse.ttf)
+juce_add_binary_data(TapeInData SOURCES
+    Resources/fonts/Boldonse.ttf
+    Resources/images/tapein_logo.png)
 
 target_sources(TapeIn PRIVATE
     Source/Main.cpp

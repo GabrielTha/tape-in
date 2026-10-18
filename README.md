@@ -16,12 +16,14 @@ Windows port.
 
 ## Status
 
-**Phase 2 built (awaiting the maintainer's acceptance tests):** a menu-bar
-macOS app that advertises an AirPlay receiver and plays every sender through
-the output you choose, with a per-source fader, mute, solo and meter, a
-renamable destination, buffer-mode options and start-at-login. Phase 1
-(`tapein-cli` receiver to WAV, verified sample-exact against pyatv and
-cliraop) is merged to `main`. See [docs/SPEC.md](docs/SPEC.md) for the plan,
+**Phase 3 built (awaiting the maintainer's acceptance tests):** the menu-bar
+macOS app now shows what each sender is playing — track, artist, album and
+album artwork — and can drive the sender back (play/pause, next, previous),
+all in a redesigned vertical neumorphic UI. Phase 2 (the app: per-source
+fader, mute, solo, renamable destination, buffer modes, start-at-login) is
+accepted and merged; Phase 1 (`tapein-cli` receiver to WAV, verified
+sample-exact against pyatv and cliraop) is merged to `main`. See
+[docs/SPEC.md](docs/SPEC.md) for the plan,
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, and the phase
 reports in [docs/phase-reports/](docs/phase-reports/) for what was built and
 how to test it.

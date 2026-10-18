@@ -136,8 +136,9 @@ cmake/       toolchain and helper modules.
 
 - Phase 0 (research and decisions): delivered 2026-10-16 on `phase-0/research`; decisions recorded in ARCHITECTURE.md §13.
 - Phase 1 (CLI receiver): built 2026-10-16 on `phase-1/cli-receiver`, merged to `main`; report in `docs/phase-reports/phase-1.md`.
-- Phase 2 (standalone macOS app): built 2026-10-16 on `phase-2/app`; report in `docs/phase-reports/phase-2.md`; waiting for the maintainer's iPhone acceptance tests and OK. Adds the audio pipeline (SpscRing, Resampler, DriftController, SourceStream, Mixer), the Engine, ILoginItem, and the JUCE menu-bar app. Build the app with `-DTAPEIN_BUILD_APP=ON`.
-- Phases 3–6: not started. See `docs/SPEC.md` §6.
+- Phase 2 (standalone macOS app): built 2026-10-16 on `phase-2/app`, merged to `main`; report in `docs/phase-reports/phase-2.md`; **accepted by the maintainer 2026-10-17** (iPhone found "Tape In", connected and played through the Scarlett 18i20). Adds the audio pipeline (SpscRing, Resampler, DriftController, SourceStream, Mixer), the Engine, ILoginItem, and the JUCE menu-bar app. Build the app with `-DTAPEIN_BUILD_APP=ON`.
+- Phase 3 (remote control + metadata + neumorphic UI): built 2026-10-17 on `phase-3/remote-metadata`; report in `docs/phase-reports/phase-3.md`; waiting for the maintainer's iPhone acceptance tests. Adds the DMAP metadata/progress parsers, SET_PARAMETER metadata/artwork/progress routing, the DACP remote-control path (`IServiceResolver` + macOS `DnsSdResolver`, `DacpClient`, `Engine::sendTransportCommand`), and the vertical neumorphic UI (Boldonse brand font embedded as BinaryData, `Theme`/`NeumorphicLookAndFeel`, rewritten `SourceRow`/`MainComponent`).
+- Phases 4–6: not started. See `docs/SPEC.md` §6.
 
 ## Things learned building the app (keep)
 
@@ -152,3 +153,11 @@ cmake/       toolchain and helper modules.
 - The sinc converters (medium/best) need a healthy input block per call; the
   per-source stream feeds the whole input FIFO and reports fill as ring +
   FIFO so the drift loop still sees the true level.
+- There is no mDNS *browser* in the tree, only the advertiser; Phase 3 added
+  `IServiceResolver` + a macOS `DnsSdResolver` (DNSServiceResolve + getaddrinfo)
+  to reach the sender's `_dacp._tcp` control server. Core stays platform-free:
+  the Engine takes a `ResolverFactory` the app supplies (a `DnsSdResolver`),
+  never constructing a platform type itself.
+- JUCE embeds binary assets via `juce_add_binary_data` (target `TapeInData`);
+  the Boldonse `.ttf` becomes `BinaryData::Boldonse_ttf`. `Font::getStringWidth*`
+  is gone in JUCE 9 — use `juce::GlyphArrangement::getStringWidth(font, text)`.

@@ -6,6 +6,7 @@
 
 #include "tapein/core/buffer/jitter_buffer.h"
 #include "tapein/core/crypto/apple_challenge.h"
+#include "tapein/core/crypto/digest_auth.h"
 #include "tapein/core/crypto/raop_key.h"
 #include "tapein/core/net/reactor.h"
 #include "tapein/core/net/socket.h"
@@ -173,6 +174,84 @@ TEST_CASE("Apple-Response is omitted when answering is disabled")
     auto r = c.request("OPTIONS", "Apple-Challenge: AAECAwQFBgcICQoLDA0ODw\r\n", "", "*");
     REQUIRE(r.status == 200);
     REQUIRE_FALSE(r.headers.get("Apple-Response").has_value());
+}
+
+TEST_CASE("TXT pw flag follows requirePassword and a non-empty password")
+{
+    Fixture fx;
+    auto pwOf = [](const Receiver& r) {
+        const auto rec = r.serviceRecord();
+        std::map<std::string, std::string> txt(rec.txt.begin(), rec.txt.end());
+        return txt["pw"];
+    };
+    REQUIRE(pwOf(*fx.receiver) == "false");
+
+    auto rebuild = [&] {
+        fx.receiver->stop();
+        fx.receiver = std::make_unique<Receiver>(fx.reactor, fx.config, fx.sink, fx.advertiser, fx.key);
+        REQUIRE(fx.receiver->start().ok());
+    };
+
+    fx.config.requirePassword = true; // but no password yet
+    rebuild();
+    REQUIRE(pwOf(*fx.receiver) == "false");
+
+    fx.config.password = "hunter2";
+    rebuild();
+    REQUIRE(pwOf(*fx.receiver) == "true");
+}
+
+namespace {
+// Pulls the quoted value of key=\"...\" out of a WWW-Authenticate challenge.
+std::string challengeField(std::string_view header, std::string_view key)
+{
+    const std::string needle = std::string(key) + "=\"";
+    const auto start = header.find(needle);
+    if (start == std::string_view::npos) {
+        return {};
+    }
+    const auto from = start + needle.size();
+    const auto end = header.find('"', from);
+    return std::string(header.substr(from, end - from));
+}
+} // namespace
+
+TEST_CASE("requirePassword challenges unauthenticated requests and accepts the right digest")
+{
+    Fixture fx;
+    fx.receiver->stop();
+    fx.config.requirePassword = true;
+    fx.config.password = "hunter2";
+    fx.receiver = std::make_unique<Receiver>(fx.reactor, fx.config, fx.sink, fx.advertiser, fx.key);
+    REQUIRE(fx.receiver->start().ok());
+    Client c(fx);
+
+    // OPTIONS is exempt (senders probe with it).
+    REQUIRE(c.request("OPTIONS", "Apple-Challenge: AAECAwQFBgcICQoLDA0ODw\r\n", "", "*").status == 200);
+
+    // An unauthenticated ANNOUNCE is challenged.
+    auto chal = c.request("ANNOUNCE");
+    REQUIRE(chal.status == 401);
+    const auto www = chal.headers.get("WWW-Authenticate");
+    REQUIRE(www.has_value());
+    const std::string realm = challengeField(*www, "realm");
+    const std::string nonce = challengeField(*www, "nonce");
+    REQUIRE(realm == "Tape In");
+    REQUIRE(nonce.size() == 32);
+
+    // The right digest clears the gate (ANNOUNCE then proceeds past auth; the
+    // empty SDP body makes it a Bad Request, but crucially not a 401).
+    const std::string uri = "rtsp://127.0.0.1/1234";
+    const std::string resp = crypto::computeDigestResponse("iTunes", realm, "hunter2", nonce, "ANNOUNCE", uri);
+    const std::string hdr = "Authorization: Digest username=\"iTunes\", realm=\"" + realm + "\", nonce=\"" + nonce
+                            + "\", uri=\"" + uri + "\", response=\"" + resp + "\"\r\n";
+    REQUIRE(c.request("ANNOUNCE", hdr).status != 401);
+
+    // A wrong password stays challenged.
+    const std::string bad = crypto::computeDigestResponse("iTunes", realm, "wrong", nonce, "ANNOUNCE", uri);
+    const std::string badHdr = "Authorization: Digest username=\"iTunes\", realm=\"" + realm + "\", nonce=\"" + nonce
+                               + "\", uri=\"" + uri + "\", response=\"" + bad + "\"\r\n";
+    REQUIRE(c.request("ANNOUNCE", badHdr).status == 401);
 }
 
 TEST_CASE("ANNOUNCE SETUP RECORD yields three distinct dynamic ports and starts a session")

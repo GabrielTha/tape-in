@@ -51,6 +51,7 @@ public:
     std::string activeRemote;
     std::string userAgent;
     std::string clientName;
+    std::string authNonce; ///< the Digest challenge nonce we last issued on this connection
 
 private:
     uint64_t m_id;

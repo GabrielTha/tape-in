@@ -3,6 +3,7 @@
 
 #include "tapein/core/session/receiver.h"
 
+#include "tapein/core/crypto/digest_auth.h"
 #include "tapein/core/rtsp/sdp.h"
 
 #include <algorithm>
@@ -12,6 +13,8 @@
 namespace tapein::core::session {
 
 namespace {
+
+constexpr std::string_view kRealm = "Tape In";
 
 constexpr const char* kPublicMethods =
     "ANNOUNCE, SETUP, RECORD, PAUSE, FLUSH, TEARDOWN, OPTIONS, GET_PARAMETER, SET_PARAMETER";
@@ -23,6 +26,8 @@ const char* reasonFor(int status) noexcept
         return "OK";
     case 400:
         return "Bad Request";
+    case 401:
+        return "Unauthorized";
     case 403:
         return "Forbidden";
     case 404:
@@ -185,7 +190,8 @@ platform::ServiceRecord Receiver::serviceRecord() const
     rec.txt = {
         {"txtvers", "1"}, {"ch", "2"},      {"cn", "0,1"},    {"et", m_config.txtEt}, {"ek", "1"},
         {"sr", "44100"},  {"ss", "16"},     {"tp", "UDP"},    {"vn", "3"},            {"da", "true"},
-        {"sv", "false"},  {"md", "0,1,2"},  {"pw", "false"},  {"sm", "false"},        {"am", "TapeIn,1"},
+        {"sv", "false"},  {"md", "0,1,2"},  {"pw", passwordRequired() ? "true" : "false"},
+        {"sm", "false"},  {"am", "TapeIn,1"},
         {"vs", "130.14"}, {"src", m_config.sourceUrl},
     };
     return rec;
@@ -321,11 +327,39 @@ rtsp::Response Receiver::makeResponse(const RtspConnection& conn, const rtsp::Re
     return r;
 }
 
+bool Receiver::authorize(RtspConnection& conn, const rtsp::Request& request)
+{
+    if (!passwordRequired()) {
+        return true;
+    }
+    // Validate against the nonce we last issued on this connection.
+    if (!conn.authNonce.empty()) {
+        if (const auto cred = crypto::parseDigestAuthorization(request.headers.get("Authorization").value_or(""))) {
+            if (crypto::verifyDigest(*cred, m_config.password, request.method, kRealm, conn.authNonce)) {
+                return true;
+            }
+        }
+    }
+    // Missing or wrong: (re)challenge with a fresh nonce.
+    conn.authNonce = crypto::generateNonce();
+    auto r = makeResponse(conn, request, 401);
+    r.headers.set("WWW-Authenticate",
+                  "Digest realm=\"" + std::string(kRealm) + "\", nonce=\"" + conn.authNonce + "\"");
+    log("conn " + std::to_string(conn.id()) + " 401 challenge nonce " + conn.authNonce);
+    conn.send(r);
+    return false;
+}
+
 void Receiver::onRequest(RtspConnection& conn, const rtsp::Request& request)
 {
     log("conn " + std::to_string(conn.id()) + " <- " + request.method + " " + request.uri);
     if (Session* live = findSession(conn.sessionId)) {
         live->noteActivity();
+    }
+    // "Restrict access": every method except OPTIONS (senders probe with it)
+    // must carry a valid RTSP Digest credential.
+    if (request.method != "OPTIONS" && !authorize(conn, request)) {
+        return;
     }
     if (request.method == "OPTIONS") {
         handleOptions(conn, request);

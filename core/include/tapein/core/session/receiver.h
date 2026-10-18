@@ -37,6 +37,8 @@ struct ReceiverConfig {
     std::string sourceUrl = "https://github.com/GabrielTha/tape-in";
     std::string txtEt = "0,1"; ///< experiment hook: "0" advertises no encryption
     bool answerAppleChallenge = true; ///< experiment hook
+    bool requirePassword = false; ///< "restrict access": challenge senders with RTSP Digest auth
+    std::string password; ///< the shared password; empty disables the challenge even when requirePassword is set
     std::function<void(std::string)> log; ///< optional, network thread
     /// Optional raw-traffic taps for the capture tool (network thread).
     std::function<void(uint64_t connectionId, bool outbound, std::span<const uint8_t>)> captureRtsp;
@@ -67,6 +69,13 @@ private:
     void onRequest(RtspConnection& conn, const rtsp::Request& request);
     void onConnectionClosed(RtspConnection& conn, std::string_view reason);
     rtsp::Response makeResponse(const RtspConnection& conn, const rtsp::Request& request, int status) const;
+    /// "Restrict access" is active only when a password is actually set.
+    [[nodiscard]] bool passwordRequired() const noexcept
+    {
+        return m_config.requirePassword && !m_config.password.empty();
+    }
+    /// True when the request may proceed; otherwise a 401 challenge was sent.
+    [[nodiscard]] bool authorize(RtspConnection& conn, const rtsp::Request& request);
 
     void handleOptions(RtspConnection&, const rtsp::Request&);
     void handleAnnounce(RtspConnection&, const rtsp::Request&);

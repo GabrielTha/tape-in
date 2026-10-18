@@ -31,7 +31,14 @@ bool AppEngine::start()
     cfg.ignoreSenderVolume = m_settings.ignoreSenderVolume();
     cfg.receiver.log = [](std::string m) { juce::Logger::writeToLog(m); };
 
-    m_engine = std::make_unique<core::session::Engine>(std::move(cfg), m_advertiser, m_key);
+    core::session::Engine::ResolverFactory resolverFactory;
+#if defined(TAPEIN_HAS_DNS_SD)
+    resolverFactory = [](core::net::Reactor& reactor) -> std::unique_ptr<core::platform::IServiceResolver> {
+        return std::make_unique<tapein::platform::DnsSdResolver>(reactor);
+    };
+#endif
+    m_engine = std::make_unique<core::session::Engine>(std::move(cfg), m_advertiser, m_key, nullptr,
+                                                       std::move(resolverFactory));
     auto started = m_engine->start();
     if (!started.ok()) {
         m_lastError = juce::String("receiver: ") + started.error().message;

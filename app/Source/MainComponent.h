@@ -6,16 +6,19 @@
 #include "AppEngine.h"
 #include "Settings.h"
 #include "SourceRow.h"
+#include "Theme.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <array>
 #include <memory>
 #include <vector>
 
 namespace tapein::app {
 
-/// The main window content: header (name, output, rate, start-at-login,
-/// advanced), a scrolling list of source rows, and an empty-state notice.
+/// The vertical neumorphic main window: a top bar (brand, output device,
+/// settings), a scrolling list of source slots, and a buffer-mode footer.
+/// A settings panel folds down from the gear.
 class MainComponent final : public juce::Component, private juce::Timer {
 public:
     MainComponent(AppEngine& app, Settings& settings);
@@ -30,30 +33,40 @@ private:
     void refreshLoginItem();
     void rebuildRows(const std::vector<core::session::SourceSnapshot>& snaps);
     void applyName();
+    void selectBuffer(int index);
+    void layoutSettings(juce::Rectangle<int> area);
 
     AppEngine& m_app;
     Settings& m_settings;
+    theme::NeumorphicLookAndFeel m_lnf;
 
-    juce::Label m_title;
-    juce::TextEditor m_name;
+    // Top bar
     juce::ComboBox m_output;
-    juce::Label m_rate;
+    juce::TextButton m_gear{""};
+    bool m_settingsOpen = false;
+
+    // Settings panel (folds down from the gear)
+    juce::Component m_settingsPanel;
+    juce::Label m_nameLabel;
+    juce::TextEditor m_name;
     juce::ToggleButton m_login{"Start at login"};
     juce::Label m_loginHint;
-
-    juce::TextButton m_advancedToggle{"Advanced"};
-    juce::Component m_advanced;
-    juce::ComboBox m_bufferMode;
     juce::ToggleButton m_ignoreVolume{"Ignore sender volume"};
-    bool m_advancedOpen = false;
 
+    // Local Network permission banner
     juce::Label m_banner;
     juce::TextButton m_openSettings{"Open System Settings"};
-    juce::Label m_empty;
 
+    // Source list
+    juce::Label m_empty;
     juce::Viewport m_viewport;
     juce::Component m_rowHost;
     std::vector<std::unique_ptr<SourceRow>> m_rows;
+
+    // Buffer-mode footer
+    std::array<juce::TextButton, 3> m_buffer{juce::TextButton{"Sync"}, juce::TextButton{"Short"},
+                                             juce::TextButton{"Monitor"}};
+    juce::Label m_status;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

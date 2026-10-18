@@ -9,6 +9,9 @@
 #include "tapein/core/crypto/raop_key.h"
 #include "tapein/core/session/engine.h"
 #include "tapein/platform/dns_sd_advertiser.h"
+#if defined(TAPEIN_HAS_DNS_SD)
+#include "tapein/platform/dns_sd_resolver.h"
+#endif
 #if defined(TAPEIN_HAS_LOGIN_ITEM)
 #include "tapein/platform/mac_login_item.h"
 #else

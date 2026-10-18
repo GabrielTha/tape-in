@@ -5,6 +5,7 @@
 
 #include "AppEngine.h"
 #include "AboutComponent.h"
+#include "DockReopen.h"
 #include "MainComponent.h"
 #include "Settings.h"
 #include "TrayIcon.h"
@@ -25,13 +26,29 @@ public:
         setResizable(true, true);
         setResizeLimits(460, 480, 900, 1400);
         const auto saved = settings.windowBounds();
-        if (!saved.isEmpty()) {
+        if (boundsAreUsable(saved)) {
             setBounds(saved);
         } else {
+            // Empty, too small, or mostly off-screen (e.g. saved on another
+            // monitor): fall back to the content's natural size, centred.
             centreWithSize(getWidth(), getHeight());
         }
         m_settings = &settings;
         setVisible(true);
+        toFront(true);
+    }
+
+    /// A saved rectangle is only restored if it still fits the resize limits
+    /// and lands substantially on a connected display, so the window can never
+    /// open off-screen or too small to use.
+    static bool boundsAreUsable(juce::Rectangle<int> b)
+    {
+        if (b.isEmpty() || b.getWidth() < 460 || b.getHeight() < 480) {
+            return false;
+        }
+        const auto usable = juce::Desktop::getInstance().getDisplays().getTotalBounds(true);
+        const auto overlap = b.getIntersection(usable);
+        return overlap.getWidth() >= 200 && overlap.getHeight() >= 120;
     }
 
     void closeButtonPressed() override { setVisible(false); }
@@ -85,6 +102,10 @@ public:
             juce::Logger::writeToLog("start failed: " + app->lastError());
         }
         window = std::make_unique<MainWindow>(*app, *settings);
+        juce::Process::makeForegroundProcess();
+        // A regular Dock app: clicking the Dock icon with the window closed
+        // reopens it (JUCE does not forward this on its own).
+        installDockReopenHandler([this] { showWindow(); });
         tray = std::make_unique<TrayIcon>(app->loginItem());
         tray->onToggleWindow = [this] { toggleWindow(); };
         tray->onAbout = [] { AboutComponent::show(); };
@@ -109,11 +130,22 @@ public:
         if (window == nullptr) {
             return;
         }
-        const bool show = !window->isVisible();
-        window->setVisible(show);
-        if (show) {
-            window->toFront(true);
+        if (window->isVisible()) {
+            window->setVisible(false);
+        } else {
+            showWindow();
         }
+    }
+
+    void showWindow()
+    {
+        if (window == nullptr) {
+            return;
+        }
+        juce::Process::makeForegroundProcess();
+        window->setVisible(true);
+        window->setMinimised(false);
+        window->toFront(true);
     }
     void shutdown() override
     {

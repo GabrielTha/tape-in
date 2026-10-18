@@ -31,6 +31,7 @@ target_sources(TapeIn PRIVATE
     Source/MainComponent.cpp
     Source/TrayIcon.cpp
     Source/AboutComponent.cpp
+    Source/DockReopen.mm
 )
 
 target_compile_definitions(TapeIn PRIVATE

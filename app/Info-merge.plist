@@ -2,9 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- Status-bar app: no Dock icon, no application menu until a window shows. -->
+    <!-- Regular Dock app: shows in the Dock and can be brought to the front;
+         a status-bar item is still installed for quick access. -->
     <key>LSUIElement</key>
-    <true/>
+    <false/>
     <key>NSHighResolutionCapable</key>
     <true/>
     <!-- macOS 15+ Local Network privacy: the receiver registers a Bonjour

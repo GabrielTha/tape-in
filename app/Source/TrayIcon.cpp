@@ -42,6 +42,9 @@ void TrayIcon::showMenu()
     menu.addItem(1, "Show Tape In");
     const bool enabled = m_loginItem.status() == Status::enabled;
     menu.addItem(2, "Start at login", true, enabled);
+    if (isIgnoreSenderVolume) {
+        menu.addItem(5, "Ignore sender volume", true, isIgnoreSenderVolume());
+    }
     menu.addSeparator();
     menu.addItem(3, "About Tape In\xe2\x80\xa6");
     menu.addSeparator();
@@ -54,8 +57,18 @@ void TrayIcon::showMenu()
                 onToggleWindow();
             }
             break;
-        case 2:
-            (void)m_loginItem.setEnabled(m_loginItem.status() != core::platform::ILoginItem::Status::enabled);
+        case 2: {
+            const bool want = m_loginItem.status() != core::platform::ILoginItem::Status::enabled;
+            (void)m_loginItem.setEnabled(want);
+            if (onStartAtLoginChanged) {
+                onStartAtLoginChanged(want);
+            }
+            break;
+        }
+        case 5:
+            if (onIgnoreSenderVolume && isIgnoreSenderVolume) {
+                onIgnoreSenderVolume(!isIgnoreSenderVolume());
+            }
             break;
         case 3:
             if (onAbout) {

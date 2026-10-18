@@ -89,6 +89,14 @@ public:
         tray->onToggleWindow = [this] { toggleWindow(); };
         tray->onAbout = [] { AboutComponent::show(); };
         tray->onQuit = [this] { systemRequestedQuit(); };
+        tray->onStartAtLoginChanged = [this](bool enabled) { settings->setStartAtLogin(enabled); };
+        tray->isIgnoreSenderVolume = [this] { return settings->ignoreSenderVolume(); };
+        tray->onIgnoreSenderVolume = [this](bool ignore) {
+            if (app->engine() != nullptr) {
+                app->engine()->setIgnoreSenderVolume(ignore);
+            }
+            settings->setIgnoreSenderVolume(ignore);
+        };
         juce::Logger::writeToLog("Tape In ready on port "
                                  + juce::String(app->engine() != nullptr ? app->engine()->rtspPort() : 0));
         if (app->engine() != nullptr) {

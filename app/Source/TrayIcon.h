@@ -21,6 +21,9 @@ public:
     std::function<void()> onToggleWindow;
     std::function<void()> onAbout;
     std::function<void()> onQuit;
+    std::function<void(bool)> onStartAtLoginChanged; ///< persists the choice
+    std::function<bool()> isIgnoreSenderVolume;
+    std::function<void(bool)> onIgnoreSenderVolume;
 
     void mouseDown(const juce::MouseEvent& e) override;
 

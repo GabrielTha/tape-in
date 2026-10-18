@@ -28,111 +28,88 @@ int indexForMode(core::session::BufferMode m)
         return 0;
     }
 }
-constexpr int kRowHeight = 132;
+const char* latencyFor(int index)
+{
+    return index == 1 ? "~0.5" : index == 2 ? "~0.15" : "~2.0";
+}
+constexpr int kRowHeight = 130;
 } // namespace
+
+// The settings gear: a raised square that toggles the modal.
+class MainComponent::GearButton final : public juce::Button {
+public:
+    GearButton() : juce::Button({}) { setClickingTogglesState(true); }
+    void paintButton(juce::Graphics& g, bool highlighted, bool /*down*/) override
+    {
+        auto b = getLocalBounds().toFloat();
+        if (getToggleState()) {
+            theme::drawInset(g, b, 10.0f, theme::colours::slot);
+        } else {
+            theme::drawRaised(g, b.reduced(1.0f), 9.0f, theme::colours::background);
+        }
+        const juce::Colour ink = getToggleState()   ? theme::colours::accent
+                                 : highlighted       ? juce::Colours::white
+                                                     : juce::Colour(0xffb9bfc7);
+        theme::icons::gear(g, juce::Rectangle<float>(17, 17).withCentre(b.getCentre()), ink);
+    }
+};
 
 MainComponent::MainComponent(AppEngine& app, Settings& settings) : m_app(app), m_settings(settings)
 {
     setLookAndFeel(&m_lnf);
-    setSize(500, 620);
 
-    m_output.setTextWhenNothingSelected("Output device");
-    m_output.setJustificationType(juce::Justification::centred);
-    m_output.onChange = [this] {
-        if (m_output.getSelectedId() > 0)
-            m_app.audio().selectOutput(m_output.getText());
+    m_device.onSelect = [this](const juce::String& name) { m_app.audio().selectOutput(name); };
+    addAndMakeVisible(m_device);
+
+    m_gear = std::make_unique<GearButton>();
+    m_gear->onClick = [this] { openSettings(m_gear->getToggleState()); };
+    addAndMakeVisible(*m_gear);
+
+    m_modal.onApply = [this](const SettingsModal::Values& v) { applySettings(v); };
+    m_modal.onClose = [this] {
+        m_gear->setToggleState(false, juce::dontSendNotification);
+        openSettings(false);
     };
-    addAndMakeVisible(m_output);
+    addChildComponent(m_modal);
 
-    m_gear.setButtonText(juce::String::fromUTF8("\xe2\x9a\x99")); // gear glyph
-    m_gear.setClickingTogglesState(true);
-    m_gear.setColour(juce::TextButton::buttonColourId, theme::colours::slot);
-    m_gear.setColour(juce::TextButton::textColourOffId, theme::colours::muted);
-    m_gear.setColour(juce::TextButton::textColourOnId, theme::colours::accent);
-    m_gear.onClick = [this] {
-        m_settingsOpen = m_gear.getToggleState();
-        m_settingsPanel.setVisible(m_settingsOpen);
-        resized();
-    };
-    addAndMakeVisible(m_gear);
-
-    // --- settings panel ---
-    m_nameLabel.setText("Network name", juce::dontSendNotification);
-    m_nameLabel.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-    m_nameLabel.setColour(juce::Label::textColourId, theme::colours::faint);
-    m_settingsPanel.addAndMakeVisible(m_nameLabel);
-
-    m_name.setText(m_settings.receiverName(), juce::dontSendNotification);
-    m_name.setTextToShowWhenEmpty("Tape In", theme::colours::faint);
-    m_name.onReturnKey = [this] { applyName(); };
-    m_name.onFocusLost = [this] { applyName(); };
-    m_settingsPanel.addAndMakeVisible(m_name);
-
-    m_login.onClick = [this] {
-        const auto r = m_app.loginItem().setEnabled(m_login.getToggleState());
-        if (!r.ok())
-            juce::Logger::writeToLog("start at login: " + juce::String(r.error().message));
-        m_settings.setStartAtLogin(m_login.getToggleState());
-        refreshLoginItem();
-    };
-    m_settingsPanel.addAndMakeVisible(m_login);
-
-    m_loginHint.setFont(juce::FontOptions(11.0f));
-    m_loginHint.setColour(juce::Label::textColourId, theme::colours::accent);
-    m_settingsPanel.addChildComponent(m_loginHint);
-
-    m_ignoreVolume.setToggleState(m_settings.ignoreSenderVolume(), juce::dontSendNotification);
-    m_ignoreVolume.onClick = [this] {
-        m_app.engine()->setIgnoreSenderVolume(m_ignoreVolume.getToggleState());
-        m_settings.setIgnoreSenderVolume(m_ignoreVolume.getToggleState());
-    };
-    m_settingsPanel.addAndMakeVisible(m_ignoreVolume);
-    addChildComponent(m_settingsPanel);
-
-    // --- Local Network banner ---
+    // Local Network permission banner.
     m_banner.setColour(juce::Label::textColourId, juce::Colour(0xffe4572e));
     m_banner.setFont(juce::FontOptions(12.0f, juce::Font::bold));
     addChildComponent(m_banner);
     m_openSettings.onClick = [this] {
         m_app.loginItem().openSystemSettings();
-        juce::URL("x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork").launchInDefaultBrowser();
+        juce::URL("x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork")
+            .launchInDefaultBrowser();
     };
     addChildComponent(m_openSettings);
 
-    // --- source list ---
-    m_empty.setJustificationType(juce::Justification::centred);
-    m_empty.setColour(juce::Label::textColourId, theme::colours::muted);
-    m_empty.setText("Waiting for a device.\nPick \"" + m_app.engine()->name()
-                        + "\" under AirPlay on your phone.\n\nWorks with AirPlay. Not affiliated with Apple Inc.",
-                    juce::dontSendNotification);
-    addChildComponent(m_empty);
-
+    // Source list.
     m_viewport.setViewedComponent(&m_rowHost, false);
     m_viewport.setScrollBarsShown(true, false);
     addAndMakeVisible(m_viewport);
 
-    // --- buffer footer ---
+    // Buffer-mode footer (a segmented control painted over an inset trough).
     for (int i = 0; i < 3; ++i) {
         auto& b = m_buffer[static_cast<size_t>(i)];
         b.setClickingTogglesState(true);
         b.setRadioGroupId(42);
-        b.setColour(juce::TextButton::buttonColourId, theme::colours::background);
-        b.setColour(juce::TextButton::buttonOnColourId, theme::colours::slot);
-        b.setColour(juce::TextButton::textColourOffId, theme::colours::muted);
+        b.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+        b.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+        b.setColour(juce::TextButton::textColourOffId, juce::Colour(0xff8b929c));
         b.setColour(juce::TextButton::textColourOnId, theme::colours::text);
         b.onClick = [this, i] { selectBuffer(i); };
         addAndMakeVisible(b);
     }
-    m_buffer[static_cast<size_t>(indexForMode(m_settings.bufferMode()))].setToggleState(true, juce::dontSendNotification);
+    m_bufferIndex = indexForMode(m_settings.bufferMode());
+    m_buffer[static_cast<size_t>(m_bufferIndex)].setToggleState(true, juce::dontSendNotification);
 
     m_status.setFont(juce::FontOptions(11.0f));
-    m_status.setColour(juce::Label::textColourId, theme::colours::faint);
+    m_status.setColour(juce::Label::textColourId, juce::Colour(0xff5f6872));
     m_status.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(m_status);
 
-    m_login.setToggleState(m_settings.startAtLogin(), juce::dontSendNotification);
     refreshOutputs();
-    refreshLoginItem();
+    setSize(500, 726); // after every child exists: setSize drives resized()
     startTimerHz(30);
 }
 
@@ -144,60 +121,60 @@ MainComponent::~MainComponent()
 
 void MainComponent::selectBuffer(int index)
 {
+    m_bufferIndex = index;
     const auto mode = modeForIndex(index);
     m_app.engine()->setBufferMode(mode);
     m_settings.setBufferMode(mode);
+    repaint();
 }
 
-void MainComponent::applyName()
+void MainComponent::openSettings(bool open)
 {
-    const juce::String name = m_name.getText().trim();
-    m_app.engine()->setName(name.toStdString());
+    if (open) {
+        SettingsModal::Values v;
+        v.name = m_app.engine()->name();
+        v.requirePassword = m_settings.requirePassword();
+        v.password = m_settings.password();
+        v.exclusiveSolo = m_settings.exclusiveSolo();
+        v.audioDevice = m_app.audio().currentOutputName();
+        m_modal.setAudioDevices(m_app.audio().outputDeviceNames());
+        m_modal.setValues(v);
+    }
+    m_modal.setVisible(open);
+    if (open) {
+        m_modal.toFront(true);
+    }
+}
+
+void MainComponent::applySettings(const SettingsModal::Values& v)
+{
+    m_app.engine()->setName(v.name.toStdString());
     const juce::String applied = m_app.engine()->name();
     m_settings.setReceiverName(applied);
-    m_name.setText(applied, juce::dontSendNotification);
-    m_empty.setText("Waiting for a device.\nPick \"" + applied
-                        + "\" under AirPlay on your phone.\n\nWorks with AirPlay. Not affiliated with Apple Inc.",
-                    juce::dontSendNotification);
+
+    m_app.engine()->setRequirePassword(v.requirePassword, v.password.toStdString());
+    m_settings.setRequirePassword(v.requirePassword);
+    m_settings.setPassword(v.password);
+
+    m_app.engine()->setExclusiveSolo(v.exclusiveSolo);
+    m_settings.setExclusiveSolo(v.exclusiveSolo);
+
+    if (v.audioDevice.isNotEmpty() && v.audioDevice != m_app.audio().currentOutputName()) {
+        m_app.audio().selectOutput(v.audioDevice);
+    }
 }
 
 void MainComponent::refreshOutputs()
 {
-    m_output.clear(juce::dontSendNotification);
-    const auto names = m_app.audio().outputDeviceNames();
-    for (int i = 0; i < names.size(); ++i)
-        m_output.addItem(names[i], i + 1);
-    const auto current = m_app.audio().currentOutputName();
-    for (int i = 0; i < names.size(); ++i)
-        if (names[i] == current)
-            m_output.setSelectedId(i + 1, juce::dontSendNotification);
-}
-
-void MainComponent::refreshLoginItem()
-{
-    using Status = core::platform::ILoginItem::Status;
-    const auto status = m_app.loginItem().status();
-    m_login.setToggleState(status == Status::enabled, juce::dontSendNotification);
-    const bool needsApproval = status == Status::requiresApproval;
-    m_loginHint.setText(needsApproval ? "Approve Tape In in System Settings > General > Login Items." : "",
-                        juce::dontSendNotification);
-    m_loginHint.setVisible(needsApproval);
+    m_device.setDevices(m_app.audio().outputDeviceNames(), m_app.audio().currentOutputName());
 }
 
 void MainComponent::rebuildRows(const std::vector<core::session::SourceSnapshot>& snaps)
 {
-    bool sameSet = snaps.size() == m_rows.size();
-    if (sameSet) {
-        for (size_t i = 0; i < snaps.size(); ++i) {
-            if (m_rows[i]->sourceId() != snaps[i].sourceId) {
-                sameSet = false;
-                break;
-            }
-        }
-    }
-    if (!sameSet) {
+    const int desired = std::max(3, static_cast<int>(snaps.size()));
+    if (static_cast<int>(m_rows.size()) != desired) {
         m_rows.clear();
-        for (size_t i = 0; i < snaps.size(); ++i) {
+        for (int i = 0; i < desired; ++i) {
             auto row = std::make_unique<SourceRow>();
             row->onGain = [this](uint64_t id, float dB) { m_app.engine()->setUserGainDb(id, dB); };
             row->onMute = [this](uint64_t id, bool m) { m_app.engine()->setMute(id, m); };
@@ -210,9 +187,14 @@ void MainComponent::rebuildRows(const std::vector<core::session::SourceSnapshot>
         }
         resized();
     }
-    for (size_t i = 0; i < snaps.size() && i < m_rows.size(); ++i)
-        m_rows[i]->update(snaps[i]);
-    m_empty.setVisible(snaps.empty());
+    for (int i = 0; i < desired; ++i) {
+        if (i < static_cast<int>(snaps.size())) {
+            m_rows[static_cast<size_t>(i)]->update(snaps[static_cast<size_t>(i)]);
+        } else {
+            m_rows[static_cast<size_t>(i)]->setEmpty();
+        }
+    }
+    m_liveCount = static_cast<int>(snaps.size());
 }
 
 void MainComponent::timerCallback()
@@ -220,70 +202,54 @@ void MainComponent::timerCallback()
     (void)m_app.engine()->pollEvents();
     rebuildRows(m_app.engine()->sources());
 
-    const double rate = m_app.audio().currentSampleRate();
-    const int bi = indexForMode(m_settings.bufferMode());
-    const char* buf = bi == 1 ? "0.5 s" : bi == 2 ? "0.15 s" : "2 s";
-    m_status.setText(juce::String(rate / 1000.0, 1) + " kHz \xc2\xb7 " + juce::String(m_rows.size())
-                         + (m_rows.size() == 1 ? " source \xc2\xb7 " : " sources \xc2\xb7 ") + buf,
-                     juce::dontSendNotification);
+    if (m_liveCount == 0) {
+        m_status.setText("waiting for a device\xe2\x80\xa6", juce::dontSendNotification);
+    } else {
+        m_status.setText(juce::String(m_liveCount) + (m_liveCount == 1 ? " source \xc2\xb7 " : " sources \xc2\xb7 ")
+                             + latencyFor(m_bufferIndex) + " s latency",
+                         juce::dontSendNotification);
+    }
 
     const bool denied = !m_app.lastError().isEmpty();
     m_banner.setVisible(denied);
     m_openSettings.setVisible(denied);
-    if (denied)
+    if (denied) {
         m_banner.setText(m_app.lastError(), juce::dontSendNotification);
-    if (m_output.getNumItems() != m_app.audio().outputDeviceNames().size())
+    }
+    if (m_device.isVisible() && !m_gear->getToggleState()) {
         refreshOutputs();
-}
-
-void MainComponent::layoutSettings(juce::Rectangle<int> area)
-{
-    m_settingsPanel.setBounds(area);
-    auto a = m_settingsPanel.getLocalBounds().reduced(14, 12);
-    m_nameLabel.setBounds(a.removeFromTop(16));
-    m_name.setBounds(a.removeFromTop(34));
-    a.removeFromTop(10);
-    m_login.setBounds(a.removeFromTop(24));
-    if (m_loginHint.isVisible())
-        m_loginHint.setBounds(a.removeFromTop(16));
-    m_ignoreVolume.setBounds(a.removeFromTop(24));
+    }
 }
 
 void MainComponent::resized()
 {
     auto r = getLocalBounds();
 
-    // Top bar
-    auto top = r.removeFromTop(64).reduced(18, 14);
-    top.removeFromLeft(150); // brand (painted)
-    m_gear.setBounds(top.removeFromRight(36));
-    top.removeFromRight(12);
-    m_output.setBounds(top.reduced(10, 0));
+    // Top bar.
+    auto bar = r.removeFromTop(64).reduced(18, 0);
+    m_gear->setBounds(bar.removeFromRight(36).withSizeKeepingCentre(36, 36));
+    m_device.setBounds(juce::Rectangle<int>(0, 0, 210, 36).withCentre({getWidth() / 2, 32}));
 
-    // Settings panel (fold-down)
-    if (m_settingsOpen) {
-        const int h = m_loginHint.isVisible() ? 150 : 134;
-        layoutSettings(r.removeFromTop(h).reduced(18, 0));
-        r.removeFromTop(6);
-    }
-
-    // Banner
+    // Banner.
     if (m_banner.isVisible()) {
         auto b = r.removeFromTop(48).reduced(18, 0);
         m_banner.setBounds(b.removeFromTop(20));
         m_openSettings.setBounds(b.removeFromTop(24).removeFromLeft(180));
     }
 
-    // Footer
-    auto footer = r.removeFromBottom(58).reduced(18, 12);
-    auto seg = footer.removeFromLeft(210);
-    for (int i = 0; i < 3; ++i)
-        m_buffer[static_cast<size_t>(i)].setBounds(seg.removeFromLeft(70).reduced(1));
-    m_status.setBounds(footer);
+    // Footer.
+    auto footer = r.removeFromBottom(60).reduced(18, 14);
+    footer.removeFromLeft(52); // "BUFFER" label (painted)
+    auto trough = footer.removeFromLeft(210);
+    auto seg = trough.reduced(4);
+    const int sw = seg.getWidth() / 3;
+    for (int i = 0; i < 3; ++i) {
+        m_buffer[static_cast<size_t>(i)].setBounds(seg.removeFromLeft(i == 2 ? seg.getWidth() : sw).reduced(1));
+    }
+    m_status.setBounds(footer.withTrimmedLeft(10));
 
-    // Source list
-    auto list = r.reduced(18, 0);
-    m_empty.setBounds(list);
+    // Source list.
+    auto list = r.reduced(18, 0).withTrimmedTop(2);
     m_viewport.setBounds(list);
     m_rowHost.setSize(m_viewport.getWidth() - 8,
                       std::max(list.getHeight(), static_cast<int>(m_rows.size()) * kRowHeight));
@@ -292,27 +258,47 @@ void MainComponent::resized()
         row->setBounds(0, y, m_rowHost.getWidth(), kRowHeight - 10);
         y += kRowHeight;
     }
+
+    m_modal.setBounds(getLocalBounds());
 }
 
 void MainComponent::paint(juce::Graphics& g)
 {
     g.fillAll(theme::colours::background);
 
-    // Brand: reel mark + Boldonse wordmark.
+    // Brand: reel mark + Boldonse wordmark + "RECEIVER".
     const float cy = 32.0f;
     auto reel = juce::Rectangle<float>(18.0f, cy - 13.0f, 26.0f, 26.0f);
     theme::drawRaised(g, reel, 8.0f, theme::colours::background);
-    g.setColour(theme::colours::accent);
-    g.drawEllipse(reel.getCentreX() - 7, reel.getCentreY() - 7, 14, 14, 1.6f);
-    g.fillEllipse(reel.getCentreX() - 2, reel.getCentreY() - 2, 4, 4);
+    theme::icons::reel(g, juce::Rectangle<float>(15, 15).withCentre(reel.getCentre()), theme::colours::accent, 1.7f);
 
     g.setColour(theme::colours::text);
-    g.setFont(theme::boldonseFont(12.0f));
-    g.drawText("TAPE IN", juce::Rectangle<float>(52.0f, cy - 9.0f, 110.0f, 18.0f), juce::Justification::centredLeft);
+    const auto word = theme::boldonseFont(12.0f);
+    g.setFont(word);
+    const juce::String brand = "TAPE IN";
+    const float bw = juce::GlyphArrangement::getStringWidth(word, brand);
+    g.drawText(brand, juce::Rectangle<float>(52.0f, cy - 8.0f, bw + 4.0f, 16.0f), juce::Justification::centredLeft);
+    g.setColour(theme::colours::faint);
+    g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
+    g.drawText("RECEIVER", juce::Rectangle<float>(52.0f + bw + 9.0f, cy - 7.0f, 70.0f, 14.0f),
+               juce::Justification::centredLeft);
 
     // Separator under the top bar.
-    g.setColour(juce::Colour(0x12ffffff));
+    g.setColour(juce::Colour(0x0affffff));
     g.fillRect(0, 63, getWidth(), 1);
+
+    // Footer: "BUFFER" label + segmented trough + active pill.
+    g.setColour(juce::Colour(0xff5f6872));
+    g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
+    const auto troughRect =
+        m_buffer[0].getBounds().getUnion(m_buffer[2].getBounds()).toFloat().expanded(4.0f, 4.0f);
+    g.drawText("BUFFER", juce::Rectangle<int>(18, troughRect.getY(), 50, static_cast<int>(troughRect.getHeight())),
+               juce::Justification::centredLeft);
+    theme::drawInset(g, troughRect, 11.0f, theme::colours::inset);
+    if (m_bufferIndex >= 0 && m_bufferIndex < 3) {
+        theme::drawRaised(g, m_buffer[static_cast<size_t>(m_bufferIndex)].getBounds().toFloat().reduced(1.0f), 8.0f,
+                          theme::colours::slot);
+    }
 }
 
 } // namespace tapein::app

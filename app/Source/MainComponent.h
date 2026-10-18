@@ -4,7 +4,9 @@
 #pragma once
 
 #include "AppEngine.h"
+#include "DeviceButton.h"
 #include "Settings.h"
+#include "SettingsModal.h"
 #include "SourceRow.h"
 #include "Theme.h"
 
@@ -16,9 +18,10 @@
 
 namespace tapein::app {
 
-/// The vertical neumorphic main window: a top bar (brand, output device,
-/// settings), a scrolling list of source slots, and a buffer-mode footer.
-/// A settings panel folds down from the gear.
+/// The vertical neumorphic main window (Main/Empty artboards): a top bar
+/// (brand wordmark, centred output-device pill, settings gear), a list of
+/// source slots padded to at least three, and a buffer-mode footer. The gear
+/// opens the settings modal overlay.
 class MainComponent final : public juce::Component, private juce::Timer {
 public:
     MainComponent(AppEngine& app, Settings& settings);
@@ -28,37 +31,31 @@ public:
     void paint(juce::Graphics& g) override;
 
 private:
+    class GearButton; ///< raised square painting the gear icon
+
     void timerCallback() override;
     void refreshOutputs();
-    void refreshLoginItem();
     void rebuildRows(const std::vector<core::session::SourceSnapshot>& snaps);
-    void applyName();
+    void openSettings(bool open);
+    void applySettings(const SettingsModal::Values& v);
     void selectBuffer(int index);
-    void layoutSettings(juce::Rectangle<int> area);
 
     AppEngine& m_app;
     Settings& m_settings;
     theme::NeumorphicLookAndFeel m_lnf;
 
     // Top bar
-    juce::ComboBox m_output;
-    juce::TextButton m_gear{""};
-    bool m_settingsOpen = false;
+    DeviceButton m_device;
+    std::unique_ptr<GearButton> m_gear;
 
-    // Settings panel (folds down from the gear)
-    juce::Component m_settingsPanel;
-    juce::Label m_nameLabel;
-    juce::TextEditor m_name;
-    juce::ToggleButton m_login{"Start at login"};
-    juce::Label m_loginHint;
-    juce::ToggleButton m_ignoreVolume{"Ignore sender volume"};
+    // Settings modal overlay
+    SettingsModal m_modal;
 
     // Local Network permission banner
     juce::Label m_banner;
     juce::TextButton m_openSettings{"Open System Settings"};
 
     // Source list
-    juce::Label m_empty;
     juce::Viewport m_viewport;
     juce::Component m_rowHost;
     std::vector<std::unique_ptr<SourceRow>> m_rows;
@@ -66,7 +63,9 @@ private:
     // Buffer-mode footer
     std::array<juce::TextButton, 3> m_buffer{juce::TextButton{"Sync"}, juce::TextButton{"Short"},
                                              juce::TextButton{"Monitor"}};
+    int m_bufferIndex = 0;
     juce::Label m_status;
+    int m_liveCount = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

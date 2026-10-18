@@ -14,6 +14,9 @@ DeviceButton::DeviceButton() : juce::Button({})
 
 void DeviceButton::setDevices(const juce::StringArray& names, const juce::String& current)
 {
+    if (names == m_names && current == m_current) {
+        return;
+    }
     m_names = names;
     m_current = current;
     repaint();

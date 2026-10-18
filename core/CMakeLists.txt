@@ -29,6 +29,7 @@ add_library(tapein_core STATIC
     src/session/receiver.cpp
     src/session/engine.cpp
     src/session/dmap.cpp
+    src/session/dacp_client.cpp
 )
 add_library(tapein::core ALIAS tapein_core)
 

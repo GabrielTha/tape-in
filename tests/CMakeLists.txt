@@ -31,6 +31,7 @@ add_executable(tapein_tests
     unit/dmap_test.cpp
     unit/service_resolver_test.cpp
     unit/dns_sd_resolver_test.cpp
+    unit/dacp_client_test.cpp
 )
 target_link_libraries(tapein_tests PRIVATE tapein::core tapein::platform tapein::cli_lib tapein::warnings
     Catch2::Catch2WithMain alac::encoder MbedTLS::mbedcrypto SampleRate::samplerate)

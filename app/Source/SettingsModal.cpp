@@ -78,10 +78,12 @@ SettingsModal::SettingsModal()
         juce::PopupMenu menu;
         for (int i = 0; i < m_audioDevices.size(); ++i)
             menu.addItem(i + 1, m_audioDevices[i], true, m_audioDevices[i] == m_audio->text());
+        juce::Component::SafePointer<SettingsModal> safe(this);
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(m_audio.get()).withStandardItemHeight(32),
-                           [this](int r) {
-                               if (r > 0)
-                                   m_audio->setText(m_audioDevices[r - 1]);
+                           [safe](int r) {
+                               if (safe == nullptr || r <= 0)
+                                   return;
+                               safe->m_audio->setText(safe->m_audioDevices[r - 1]);
                            });
     };
     addAndMakeVisible(*m_audio);

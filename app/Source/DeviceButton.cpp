@@ -63,11 +63,17 @@ void DeviceButton::showMenu()
                     .withTargetComponent(this)
                     .withMinimumWidth(juce::jmax(220, getWidth()))
                     .withStandardItemHeight(38);
-    menu.showMenuAsync(opts, [this](int result) {
-        m_open = false;
-        repaint();
-        if (result > 0 && result <= m_names.size() && onSelect) {
-            onSelect(m_names[result - 1]);
+    // The menu outlives us if the window is torn down while it is open, so
+    // guard the completion against a destroyed button.
+    juce::Component::SafePointer<DeviceButton> safe(this);
+    menu.showMenuAsync(opts, [safe](int result) {
+        if (safe == nullptr) {
+            return;
+        }
+        safe->m_open = false;
+        safe->repaint();
+        if (result > 0 && result <= safe->m_names.size() && safe->onSelect) {
+            safe->onSelect(safe->m_names[result - 1]);
         }
     });
 }

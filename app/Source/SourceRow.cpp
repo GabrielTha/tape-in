@@ -9,7 +9,7 @@ namespace tapein::app {
 
 using core::session::TransportCommand;
 
-// A small round ghost button that paints a stroked transport glyph.
+// A round ghost transport button that paints a neumorphic disc plus a glyph.
 class SourceRow::IconButton final : public juce::Button {
 public:
     enum class Glyph { prev, play, pause, next };
@@ -25,40 +25,33 @@ public:
     {
         auto b = getLocalBounds().toFloat();
         const bool primary = m_glyph == Glyph::play || m_glyph == Glyph::pause;
-        if (down) {
+        if (down && isEnabled()) {
             theme::drawInset(g, b.reduced(1.0f), b.getWidth() * 0.5f, theme::colours::slot);
         } else {
             theme::drawRaised(g, b.reduced(2.0f), b.getWidth() * 0.5f - 2.0f, theme::colours::slot);
         }
-        juce::Colour ink = primary ? theme::colours::accent : theme::colours::muted;
+        juce::Colour ink = primary ? theme::colours::accent : juce::Colour(0xffc3c9d0);
         if (!isEnabled()) {
-            ink = theme::colours::dim;
+            ink = theme::colours::dimmer;
         } else if (highlighted) {
-            ink = ink.brighter(0.3f);
+            ink = primary ? ink.brighter(0.15f) : juce::Colours::white;
         }
-        g.setColour(ink);
 
-        auto c = b.getCentre();
-        const float s = b.getWidth() * 0.18f;
-        juce::Path p;
+        // Glyph box is ~55% of the disc, centred.
+        const float s = b.getWidth() * 0.52f;
+        auto box = juce::Rectangle<float>(s, s).withCentre(b.getCentre());
         switch (m_glyph) {
         case Glyph::prev:
-            g.drawLine(c.x - s * 1.4f, c.y - s, c.x - s * 1.4f, c.y + s, 1.8f);
-            p.addTriangle(c.x + s, c.y - s, c.x + s, c.y + s, c.x - s * 0.7f, c.y);
-            g.fillPath(p);
+            theme::icons::prev(g, box, ink);
             break;
         case Glyph::next:
-            g.drawLine(c.x + s * 1.4f, c.y - s, c.x + s * 1.4f, c.y + s, 1.8f);
-            p.addTriangle(c.x - s, c.y - s, c.x - s, c.y + s, c.x + s * 0.7f, c.y);
-            g.fillPath(p);
+            theme::icons::next(g, box, ink);
             break;
         case Glyph::play:
-            p.addTriangle(c.x - s * 0.7f, c.y - s, c.x - s * 0.7f, c.y + s, c.x + s, c.y);
-            g.fillPath(p);
+            theme::icons::play(g, box, ink);
             break;
         case Glyph::pause:
-            g.fillRoundedRectangle(c.x - s * 0.9f, c.y - s, s * 0.6f, s * 2.0f, 1.0f);
-            g.fillRoundedRectangle(c.x + s * 0.3f, c.y - s, s * 0.6f, s * 2.0f, 1.0f);
+            theme::icons::pause(g, box, ink);
             break;
         }
     }
@@ -96,7 +89,7 @@ SourceRow::SourceRow()
     addAndMakeVisible(m_title);
 
     m_subtitle.setFont(juce::FontOptions(12.0f));
-    m_subtitle.setColour(juce::Label::textColourId, theme::colours::muted);
+    m_subtitle.setColour(juce::Label::textColourId, theme::colours::subtitle);
     addAndMakeVisible(m_subtitle);
 
     m_prev = std::make_unique<IconButton>(IconButton::Glyph::prev);
@@ -151,13 +144,36 @@ SourceRow::SourceRow()
 
 SourceRow::~SourceRow() = default;
 
+void SourceRow::setEmpty()
+{
+    m_empty = true;
+    m_sourceId = 0;
+    m_live = false;
+    m_playing = false;
+    m_stateText.clear();
+    m_artwork = juce::Image();
+    m_artworkSize = 0;
+    m_title.setText("Slot", juce::dontSendNotification);
+    m_title.setColour(juce::Label::textColourId, theme::colours::faint);
+    m_subtitle.setText("// waiting for a device", juce::dontSendNotification);
+    m_subtitle.setColour(juce::Label::textColourId, theme::colours::dim);
+    m_play->setGlyph(IconButton::Glyph::play);
+    for (auto* b : {m_prev.get(), m_play.get(), m_next.get()})
+        b->setEnabled(false);
+    m_volume.setEnabled(false);
+    m_solo.setEnabled(false);
+    m_mute.setEnabled(false);
+    setAlpha(0.6f);
+    repaint();
+}
+
 void SourceRow::update(const core::session::SourceSnapshot& snap)
 {
+    m_empty = false;
     m_sourceId = snap.sourceId;
     m_live = snap.live;
     m_playing = snap.state == core::dsp::StreamState::playing || snap.state == core::dsp::StreamState::fadingOut;
 
-    // Title: track name if we have metadata, else the client/device name.
     const juce::String device = snap.clientName.empty() ? juce::String(snap.peer) : juce::String(snap.clientName);
     juce::String title = juce::String(snap.trackName);
     juce::String subtitle;
@@ -170,24 +186,23 @@ void SourceRow::update(const core::session::SourceSnapshot& snap)
             subtitle += " \xc2\xb7 ";
         subtitle += device;
     }
+    m_title.setColour(juce::Label::textColourId, theme::colours::text);
+    m_subtitle.setColour(juce::Label::textColourId, theme::colours::subtitle);
     m_title.setText(title, juce::dontSendNotification);
     m_subtitle.setText(subtitle, juce::dontSendNotification);
 
     m_stateText = stateText(snap.state, snap.live);
-    m_stateColour = !snap.live ? theme::colours::faint
-                   : m_playing ? theme::colours::playing
-                               : theme::colours::muted;
+    m_stateColour = !snap.live    ? theme::colours::faint
+                    : m_playing   ? theme::colours::playing
+                                  : theme::colours::muted;
 
-    if (m_play)
-        m_play->setGlyph(m_playing ? IconButton::Glyph::pause : IconButton::Glyph::play);
+    m_play->setGlyph(m_playing ? IconButton::Glyph::pause : IconButton::Glyph::play);
 
-    // Decode artwork only when the bytes change.
     if (snap.artwork.size() != m_artworkSize) {
         m_artworkSize = snap.artwork.size();
         m_artwork = snap.artwork.empty()
                         ? juce::Image()
                         : juce::ImageFileFormat::loadFrom(snap.artwork.data(), snap.artwork.size());
-        repaint();
     }
 
     if (std::abs(m_volume.getValue() - snap.userGainDb) > 0.05 && !m_volume.isMouseButtonDown())
@@ -196,37 +211,43 @@ void SourceRow::update(const core::session::SourceSnapshot& snap)
     m_solo.setToggleState(snap.solo, juce::dontSendNotification);
 
     const bool enabled = snap.live;
-    m_prev->setEnabled(enabled);
-    m_play->setEnabled(enabled);
-    m_next->setEnabled(enabled);
+    for (auto* b : {m_prev.get(), m_play.get(), m_next.get()})
+        b->setEnabled(enabled);
+    m_volume.setEnabled(enabled);
+    m_solo.setEnabled(true);
+    m_mute.setEnabled(true);
     setAlpha(snap.live ? 1.0f : 0.68f);
+    repaint();
 }
 
 void SourceRow::resized()
 {
-    auto r = getLocalBounds().reduced(14, 12);
-    auto art = r.removeFromLeft(56);
-    juce::ignoreUnused(art); // painted directly
-    r.removeFromLeft(13);
-    auto sm = r.removeFromRight(32);
+    auto r = getLocalBounds().reduced(14);
+    r.removeFromLeft(56 + 13); // art well + gap (painted)
+
+    auto sm = r.removeFromRight(30);
     m_solo.setBounds(sm.removeFromTop(26));
-    sm.removeFromTop(6);
+    sm.removeFromTop(8);
     m_mute.setBounds(sm.removeFromTop(26));
-    r.removeFromRight(10);
+    r.removeFromRight(13);
 
-    auto top = r.removeFromTop(38);
+    // Top area: title + subtitle (state painted top-right).
+    auto top = r.removeFromTop(40);
+    top.removeFromRight(92); // reserved for the state tag
     m_title.setBounds(top.removeFromTop(20));
-    m_subtitle.setBounds(top);
+    m_subtitle.setBounds(top.removeFromTop(16));
 
+    // Controls row along the bottom of the mid column.
     auto ctrls = r.removeFromBottom(34);
-    m_prev->setBounds(ctrls.removeFromLeft(32));
-    ctrls.removeFromLeft(8);
-    m_play->setBounds(ctrls.removeFromLeft(38));
-    ctrls.removeFromLeft(8);
-    m_next->setBounds(ctrls.removeFromLeft(32));
+    m_prev->setBounds(ctrls.removeFromLeft(32).withSizeKeepingCentre(32, 32));
+    ctrls.removeFromLeft(10);
+    m_play->setBounds(ctrls.removeFromLeft(38).withSizeKeepingCentre(38, 38));
+    ctrls.removeFromLeft(10);
+    m_next->setBounds(ctrls.removeFromLeft(32).withSizeKeepingCentre(32, 32));
     ctrls.removeFromLeft(14);
-    ctrls.removeFromLeft(18); // speaker glyph (painted)
-    m_volume.setBounds(ctrls);
+    ctrls.removeFromLeft(18); // speakerLow (painted)
+    ctrls.removeFromRight(18); // speakerHigh (painted)
+    m_volume.setBounds(ctrls.withSizeKeepingCentre(ctrls.getWidth(), 20));
 }
 
 void SourceRow::paint(juce::Graphics& g)
@@ -235,43 +256,49 @@ void SourceRow::paint(juce::Graphics& g)
     theme::drawRaised(g, b, 16.0f);
 
     // Artwork well.
-    auto art = juce::Rectangle<float>(14.0f, 12.0f, 56.0f, 56.0f);
-    theme::drawInset(g, art, 13.0f);
+    auto art = juce::Rectangle<float>(14.0f, 14.0f, 56.0f, 56.0f);
+    theme::drawInset(g, art, 13.0f, m_empty ? theme::colours::inset : theme::colours::slot);
     if (m_artwork.isValid()) {
         juce::Path clip;
-        clip.addRoundedRectangle(art.reduced(1.0f), 12.0f);
+        clip.addRoundedRectangle(art.reduced(1.5f), 11.5f);
         g.saveState();
         g.reduceClipRegion(clip);
-        g.drawImage(m_artwork, art.reduced(1.0f), juce::RectanglePlacement::centred | juce::RectanglePlacement::fillDestination);
+        g.drawImage(m_artwork, art.reduced(1.5f),
+                    juce::RectanglePlacement::centred | juce::RectanglePlacement::fillDestination);
         g.restoreState();
+    } else if (m_empty) {
+        theme::icons::stack(g, juce::Rectangle<float>(22, 22).withCentre(art.getCentre()), theme::colours::dim);
     } else {
-        g.setColour(theme::colours::faint);
-        const auto c = art.getCentre();
-        g.drawEllipse(c.x - 12, c.y - 12, 24, 24, 1.4f);
-        g.drawEllipse(c.x - 3, c.y - 3, 6, 6, 1.4f);
+        theme::icons::reel(g, juce::Rectangle<float>(24, 24).withCentre(art.getCentre()),
+                           juce::Colour(0xff5c6672), 1.5f);
     }
 
-    // State pill, top-right (before the S/M column).
-    if (m_stateText.isNotEmpty()) {
+    // State tag (dot + coloured text, no background), top-right of the mid area.
+    if (!m_empty && m_stateText.isNotEmpty()) {
         g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
         const float tw = juce::GlyphArrangement::getStringWidth(g.getCurrentFont(), m_stateText);
-        auto pill = juce::Rectangle<float>(getWidth() - 46.0f - tw - 22.0f, 14.0f, tw + 22.0f, 20.0f);
-        theme::drawInset(g, pill, 10.0f, theme::colours::inset);
+        const float right = static_cast<float>(getWidth()) - 14.0f - 30.0f - 13.0f;
+        auto tag = juce::Rectangle<float>(right - tw, 20.0f, tw, 14.0f);
         g.setColour(m_stateColour);
-        g.fillEllipse(pill.getX() + 8.0f, pill.getCentreY() - 3.0f, 6.0f, 6.0f);
-        g.drawText(m_stateText, pill.withTrimmedLeft(18.0f), juce::Justification::centredLeft);
+        g.fillEllipse(tag.getX() - 13.0f, tag.getCentreY() - 3.0f, 6.0f, 6.0f);
+        g.drawText(m_stateText, tag, juce::Justification::centredLeft);
     }
 
-    // Speaker glyph left of the volume slider.
+    // Dashed separator above the empty-slot caption.
+    if (m_empty) {
+        const auto sub = m_subtitle.getBounds().toFloat();
+        g.setColour(juce::Colour(0x14ffffff));
+        const float y = sub.getY() - 5.0f;
+        const float dash[] = {3.0f, 3.0f};
+        g.drawDashedLine({{sub.getX(), y}, {sub.getRight(), y}}, dash, 2, 1.0f);
+    }
+
+    // Speaker glyphs flanking the volume slider.
     const auto vb = m_volume.getBounds().toFloat();
-    g.setColour(theme::colours::faint);
-    juce::Path spk;
-    const float sx = vb.getX() - 16.0f;
-    const float sy = vb.getCentreY();
-    spk.addTriangle(sx, sy - 2, sx + 4, sy - 2, sx + 7, sy - 6);
-    spk.addRectangle(sx, sy - 2, 4.0f, 4.0f);
-    g.fillPath(spk);
-    g.strokePath(spk, juce::PathStrokeType(1.2f));
+    const juce::Colour spk = m_empty || !m_live ? theme::colours::dim : theme::colours::faint;
+    theme::icons::speakerLow(g, juce::Rectangle<float>(15, 15).withCentre({vb.getX() - 10.0f, vb.getCentreY()}), spk);
+    theme::icons::speakerHigh(g, juce::Rectangle<float>(15, 15).withCentre({vb.getRight() + 10.0f, vb.getCentreY()}),
+                              spk);
 }
 
 } // namespace tapein::app

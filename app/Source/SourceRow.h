@@ -12,15 +12,18 @@
 
 namespace tapein::app {
 
-/// A neumorphic slot: album artwork, now-playing metadata, transport buttons
-/// (prev / play-pause / next sent back to the sender), a volume fader (local
-/// mix gain) and solo/mute. Edits call back out to the engine.
+/// A neumorphic slot (the Main/Empty artboards): album artwork, now-playing
+/// metadata, a now-playing state tag, transport buttons (prev / play-pause /
+/// next sent back to the sender), a volume fader (local mix gain) and
+/// solo/mute. `update()` shows a live source; `setEmpty()` shows the "waiting
+/// for a device" placeholder. Edits call back out to the engine.
 class SourceRow final : public juce::Component {
 public:
     SourceRow();
     ~SourceRow() override;
 
     void update(const core::session::SourceSnapshot& snap);
+    void setEmpty();
     [[nodiscard]] uint64_t sourceId() const noexcept { return m_sourceId; }
 
     std::function<void(uint64_t, float)> onGain;
@@ -35,6 +38,7 @@ private:
     class IconButton; ///< small ghost transport button
 
     uint64_t m_sourceId = 0;
+    bool m_empty = false;
     bool m_live = true;
     bool m_playing = false;
     juce::String m_stateText;

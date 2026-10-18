@@ -71,9 +71,6 @@ struct EngineEvent {
 
 /// Linear gain for the RAOP volume in dB; −144 (and below) is mute.
 float raopVolumeDbToGain(float dB) noexcept;
-/// Truncates a UTF-8 string to at most maxBytes without splitting a
-/// code point; an all-whitespace or empty result is reported as empty.
-std::string clampUtf8(std::string_view name, size_t maxBytes);
 
 /// Owns the receiver (network thread), the mixer (audio thread pulls it),
 /// and the source registry keyed by DACP-ID. Implements IPcmSink: a session

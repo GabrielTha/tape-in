@@ -3,6 +3,8 @@
 
 #include "tapein/core/session/engine.h"
 
+#include "tapein/core/util/text.h"
+
 #include <algorithm>
 #include <cmath>
 #include <future>
@@ -23,18 +25,6 @@ float raopVolumeDbToGain(float dB) noexcept
     return std::pow(10.0f, dB / 20.0f);
 }
 
-std::string clampUtf8(std::string_view name, size_t maxBytes)
-{
-    size_t end = std::min(name.size(), maxBytes);
-    // If the cut lands in the middle of a multi-byte code point, back up to
-    // its start (a continuation byte is 0b10xxxxxx).
-    while (end > 0 && end < name.size() && (static_cast<unsigned char>(name[end]) & 0xC0) == 0x80) {
-        --end;
-    }
-    std::string out(name.substr(0, end));
-    const bool blank = out.find_first_not_of(" \t\r\n") == std::string::npos;
-    return blank ? std::string() : out;
-}
 
 Engine::Engine(EngineConfig config, platform::IServiceAdvertiser& advertiser, std::shared_ptr<crypto::RaopRsaKey> key,
                net::Reactor* externalReactor)
@@ -48,7 +38,7 @@ Engine::Engine(EngineConfig config, platform::IServiceAdvertiser& advertiser, st
     } else {
         m_reactor = externalReactor;
     }
-    m_name = clampUtf8(m_config.receiver.name, 63);
+    m_name = util::clampUtf8(m_config.receiver.name, 63);
     if (m_name.empty()) {
         m_name = "Tape In";
     }
@@ -206,7 +196,7 @@ void Engine::rebuildReceiver()
 
 void Engine::setName(std::string name)
 {
-    std::string clamped = clampUtf8(name, 63);
+    std::string clamped = util::clampUtf8(name, 63);
     if (clamped.empty()) {
         clamped = "Tape In";
     }

@@ -28,6 +28,7 @@ add_executable(tapein_tests
     unit/mixer_test.cpp
     unit/engine_test.cpp
     unit/login_item_test.cpp
+    unit/dmap_test.cpp
 )
 target_link_libraries(tapein_tests PRIVATE tapein::core tapein::platform tapein::cli_lib tapein::warnings
     Catch2::Catch2WithMain alac::encoder MbedTLS::mbedcrypto SampleRate::samplerate)

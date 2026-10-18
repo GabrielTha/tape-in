@@ -8,7 +8,7 @@
 #     corpus; registered with CTest so every build (incl. ASan/UBSan) runs
 #     every crash-reproducer and seed we have.
 
-set(_harnesses rtsp_parser sdp rtp alac)
+set(_harnesses rtsp_parser sdp rtp alac dmap)
 set(_corpus ${CMAKE_CURRENT_SOURCE_DIR}/corpus)
 
 if(TAPEIN_FUZZ AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")

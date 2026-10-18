@@ -6,6 +6,7 @@
 add_library(tapein_core STATIC
     src/version.cpp
     src/util/base64.cpp
+    src/util/text.cpp
     src/rtsp/rtsp_message.cpp
     src/rtsp/rtsp_parser.cpp
     src/rtsp/sdp.cpp
@@ -27,6 +28,7 @@ add_library(tapein_core STATIC
     src/session/session.cpp
     src/session/receiver.cpp
     src/session/engine.cpp
+    src/session/dmap.cpp
 )
 add_library(tapein::core ALIAS tapein_core)
 

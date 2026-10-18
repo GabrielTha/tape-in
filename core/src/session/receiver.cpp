@@ -538,9 +538,17 @@ void Receiver::handleSetParameter(RtspConnection& conn, const rtsp::Request& req
                 if (endPtr != value.c_str()) {
                     session->setVolume(std::clamp(dB, -144.0f, 0.0f));
                 }
+            } else if (line.starts_with("progress:")) {
+                if (const auto p = parseProgress(line)) {
+                    session->setProgress(*p);
+                }
             }
             pos = end + 1;
         }
+    } else if (contentType.starts_with("application/x-dmap-tagged") && session != nullptr) {
+        session->setMetadata(parseDmapMetadata(request.body));
+    } else if (contentType.starts_with("image/") && session != nullptr) {
+        session->setArtwork(request.body, contentType);
     }
     conn.send(makeResponse(conn, request, 200));
 }

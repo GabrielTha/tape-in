@@ -5,8 +5,10 @@
 
 #include "tapein/core/buffer/jitter_buffer.h"
 #include "tapein/core/net/socket.h"
+#include "tapein/core/session/dmap.h"
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -48,6 +50,10 @@ public:
     virtual void onVolume(uint64_t sessionId, float dB) = 0;
     /// The sender's buffering lead, from the latest sync packet. Optional.
     virtual void onSenderLatency(uint64_t /*sessionId*/, uint32_t /*frames*/) {}
+    /// Now-playing pushed by the sender over SET_PARAMETER. All optional.
+    virtual void onMetadata(uint64_t /*sessionId*/, const DmapMetadata& /*metadata*/) {}
+    virtual void onArtwork(uint64_t /*sessionId*/, std::span<const uint8_t> /*image*/, std::string_view /*mime*/) {}
+    virtual void onProgress(uint64_t /*sessionId*/, const DmapProgress& /*progress*/) {}
     virtual void onSessionEnded(uint64_t sessionId, std::string_view reason, const SessionStats& stats) = 0;
 };
 

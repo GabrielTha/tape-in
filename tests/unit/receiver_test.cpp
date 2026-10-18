@@ -10,6 +10,7 @@
 #include "tapein/core/net/reactor.h"
 #include "tapein/core/net/socket.h"
 #include "tapein/core/rtsp/rtsp_parser.h"
+#include "tapein/core/session/dmap.h"
 #include "tapein/core/session/pcm_sink.h"
 #include "tapein/core/session/receiver.h"
 #include "tapein/core/util/base64.h"
@@ -52,6 +53,15 @@ struct RecordingSink : IPcmSink {
         blocks[id].push_back(Block{b.seq, b.wasMissing, std::vector<int16_t>(b.pcm.begin(), b.pcm.end())});
     }
     void onVolume(uint64_t id, float dB) override { volume[id] = dB; }
+    std::map<uint64_t, DmapMetadata> metadata;
+    std::map<uint64_t, std::pair<std::vector<uint8_t>, std::string>> artwork;
+    std::map<uint64_t, DmapProgress> progress;
+    void onMetadata(uint64_t id, const DmapMetadata& md) override { metadata[id] = md; }
+    void onArtwork(uint64_t id, std::span<const uint8_t> img, std::string_view mime) override
+    {
+        artwork[id] = {std::vector<uint8_t>(img.begin(), img.end()), std::string(mime)};
+    }
+    void onProgress(uint64_t id, const DmapProgress& p) override { progress[id] = p; }
     void onSessionEnded(uint64_t id, std::string_view reason, const SessionStats&) override
     {
         ended.emplace_back(id, std::string(reason));
@@ -325,6 +335,37 @@ TEST_CASE("volume SET_PARAMETER reaches the sink and GET_PARAMETER echoes it")
     auto g = c.request("GET_PARAMETER", "Session: 1\r\nContent-Type: text/parameters\r\n", "volume\r\n");
     REQUIRE(g.status == 200);
     REQUIRE(g.body.find("volume: -12.5") != std::string::npos);
+}
+
+TEST_CASE("metadata, artwork and progress SET_PARAMETER reach the sink")
+{
+    Fixture fx;
+    Client c(fx);
+    REQUIRE(c.startStream(true).status == 200);
+    const auto id = fx.sink.started[0].id;
+
+    // DMAP metadata: a single minm tag.
+    std::string dmap = "minm";
+    const char name[] = "Hello";
+    const uint32_t n = 5;
+    dmap.push_back(static_cast<char>((n >> 24) & 0xFF));
+    dmap.push_back(static_cast<char>((n >> 16) & 0xFF));
+    dmap.push_back(static_cast<char>((n >> 8) & 0xFF));
+    dmap.push_back(static_cast<char>(n & 0xFF));
+    dmap += name;
+    REQUIRE(c.request("SET_PARAMETER", "Session: 1\r\nContent-Type: application/x-dmap-tagged\r\n", dmap).status == 200);
+    REQUIRE(fx.sink.metadata[id].trackName == "Hello");
+
+    // Artwork: three JPEG bytes.
+    const std::string jpeg = "\xFF\xD8\xFF";
+    REQUIRE(c.request("SET_PARAMETER", "Session: 1\r\nContent-Type: image/jpeg\r\n", jpeg).status == 200);
+    REQUIRE(fx.sink.artwork[id].first.size() == 3);
+    REQUIRE(fx.sink.artwork[id].second == "image/jpeg");
+
+    // Progress line.
+    REQUIRE(c.request("SET_PARAMETER", "Session: 1\r\nContent-Type: text/parameters\r\n", "progress: 0/100/200\r\n").status == 200);
+    REQUIRE(fx.sink.progress[id].currentFrames == 100u);
+    REQUIRE(fx.sink.progress[id].endFrames == 200u);
 }
 
 TEST_CASE("teardown finalises; stray datagram after close is harmless")

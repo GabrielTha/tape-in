@@ -81,6 +81,11 @@ public:
     void setVolume(float dB);
     [[nodiscard]] float volume() const noexcept { return m_volumeDb; }
 
+    /// Now-playing pushed by the sender; forwarded to the sink.
+    void setMetadata(const DmapMetadata& metadata);
+    void setArtwork(std::span<const uint8_t> image, std::string_view mime);
+    void setProgress(const DmapProgress& progress);
+
     /// Releases everything still buffered, closes the sockets, cancels the
     /// timers and notifies the sink (if record() had been called). Idempotent.
     void end(std::string_view reason);

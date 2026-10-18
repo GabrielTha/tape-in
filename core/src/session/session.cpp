@@ -117,6 +117,21 @@ void Session::setVolume(float dB)
     m_sink.onVolume(m_info.id, dB);
 }
 
+void Session::setMetadata(const DmapMetadata& metadata)
+{
+    m_sink.onMetadata(m_info.id, metadata);
+}
+
+void Session::setArtwork(std::span<const uint8_t> image, std::string_view mime)
+{
+    m_sink.onArtwork(m_info.id, image, mime);
+}
+
+void Session::setProgress(const DmapProgress& progress)
+{
+    m_sink.onProgress(m_info.id, progress);
+}
+
 void Session::end(std::string_view reason)
 {
     if (m_ended) {

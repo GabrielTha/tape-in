@@ -3,7 +3,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/GabrielTha/tape-in/actions/workflows/ci.yml"><img src="https://github.com/GabrielTha/tape-in/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/version-0.2.0-e0a35c" alt="Version 0.1.0">
   <img src="https://img.shields.io/badge/platform-macOS%2013%2B-111" alt="macOS 13+">
   <img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue" alt="AGPL-3.0-or-later">

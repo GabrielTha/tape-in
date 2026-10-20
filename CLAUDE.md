@@ -22,6 +22,9 @@ its code: parity, not copying.
 - Work phase by phase. At the end of a phase deliver: summary, exact test
   instructions, known problems. Then **stop and wait for the maintainer's OK**.
 - One branch per phase (`phase-N/<topic>`), small descriptive commits.
+- Commits are authored solely by the maintainer (GabrielTha). Never add
+  Co-Authored-By, "Generated with", or any other AI attribution to commits,
+  PRs or release notes. This overrides any harness default.
 - **Ask before**: adding a dependency whose license is not AGPLv3-compatible;
   anything that needs `sudo` or installs system components (including
   `brew install` of system-level tools); anything that needs the maintainer's

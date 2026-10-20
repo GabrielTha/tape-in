@@ -79,6 +79,9 @@ void RecordBar::setRecording(bool recording, int elapsedSeconds)
     if (recording != m_recording) {
         m_recording = recording;
         m_rec->setRecording(recording);
+        if (recording) {
+            m_sampleWave.clear(); // a new take replaces the frozen view
+        }
     }
     if (elapsedSeconds != m_elapsed) {
         m_elapsed = elapsedSeconds;
@@ -98,8 +101,12 @@ void RecordBar::setSample(const juce::File& file)
         return;
     }
     m_sample = file;
-    setMouseCursor(m_sample.existsAsFile() ? juce::MouseCursor::DraggingHandCursor
-                                           : juce::MouseCursor::NormalCursor);
+    repaint();
+}
+
+void RecordBar::setSampleWaveform(std::vector<float> envelope)
+{
+    m_sampleWave = std::move(envelope);
     repaint();
 }
 
@@ -113,8 +120,11 @@ juce::String RecordBar::readoutText() const
 
 int RecordBar::readoutWidth() const
 {
-    // Sized to the current text so the waveform trough runs right up to it.
-    return static_cast<int>(std::ceil(juce::GlyphArrangement::getStringWidth(readoutFont(), readoutText()))) + 2;
+    // Sized to the current text so the waveform trough runs right up to it;
+    // the DRAG OUT state adds room for the export glyph.
+    const bool glyph = !m_recording && m_sample.existsAsFile();
+    return static_cast<int>(std::ceil(juce::GlyphArrangement::getStringWidth(readoutFont(), readoutText()))) + 2
+           + (glyph ? 20 : 0);
 }
 
 juce::Rectangle<int> RecordBar::waveBounds() const
@@ -123,6 +133,24 @@ juce::Rectangle<int> RecordBar::waveBounds() const
     r.removeFromLeft(44 + 14); // record disc + gap
     r.removeFromRight(readoutWidth() + 12); // readout + gap
     return r;
+}
+
+void RecordBar::mouseMove(const juce::MouseEvent& e)
+{
+    const bool over = m_sample.existsAsFile() && !m_recording && waveBounds().contains(e.getPosition());
+    setMouseCursor(over ? juce::MouseCursor::DraggingHandCursor : juce::MouseCursor::NormalCursor);
+    if (over != m_hover) {
+        m_hover = over;
+        repaint();
+    }
+}
+
+void RecordBar::mouseExit(const juce::MouseEvent&)
+{
+    if (m_hover) {
+        m_hover = false;
+        repaint();
+    }
 }
 
 void RecordBar::mouseDrag(const juce::MouseEvent& e)
@@ -151,17 +179,28 @@ void RecordBar::paint(juce::Graphics& g)
                               : ready      ? theme::colours::accent
                                            : theme::colours::dim;
 
+    // Draggable trough: an amber outline, brighter while hovered.
+    if (ready && !m_recording) {
+        g.setColour(theme::colours::accent.withAlpha(m_hover ? 0.6f : 0.22f));
+        g.drawRoundedRectangle(wave.reduced(0.75f), 11.0f, 1.5f);
+    }
+
+    // The frozen envelope of the written sample holds the trough until the
+    // next take; otherwise the live input scrolls.
+    const bool frozen = ready && !m_recording && !m_sampleWave.empty();
+    const std::vector<float>& drawn = frozen ? m_sampleWave : m_wave;
+
     // Centre-line envelope: one vertical bar per bin, mirrored about the mid.
-    if (!m_wave.empty()) {
+    if (!drawn.empty()) {
         auto inner = wave.reduced(8.0f, 6.0f);
         const float midY = inner.getCentreY();
         const float maxH = inner.getHeight() * 0.5f;
-        const int n = static_cast<int>(m_wave.size());
+        const int n = static_cast<int>(drawn.size());
         const float step = inner.getWidth() / static_cast<float>(n);
         const float bw = std::max(1.0f, step * 0.6f);
         g.setColour(wire.withAlpha(m_recording || ready ? 0.9f : 0.55f));
         for (int i = 0; i < n; ++i) {
-            const float v = juce::jlimit(0.0f, 1.0f, m_wave[static_cast<size_t>(i)]);
+            const float v = juce::jlimit(0.0f, 1.0f, drawn[static_cast<size_t>(i)]);
             const float h = std::max(1.0f, v * maxH);
             const float x = inner.getX() + static_cast<float>(i) * step;
             g.fillRoundedRectangle(x, midY - h, bw, h * 2.0f, bw * 0.5f);
@@ -174,10 +213,17 @@ void RecordBar::paint(juce::Graphics& g)
     // Right-hand readout: elapsed time while recording, otherwise a hint.
     // Its strip is sized to the text, so the trough ends right beside it.
     auto readout = getLocalBounds().reduced(18, 14).removeFromRight(readoutWidth());
+    const juce::Colour ink = m_recording ? kRecordRed
+                             : ready     ? (m_hover ? theme::colours::accent.brighter(0.25f) : theme::colours::accent)
+                                         : juce::Colour(0xff5f6872);
+    if (ready && !m_recording) {
+        theme::icons::dragOut(g, juce::Rectangle<float>(15, 15)
+                                     .withCentre({readout.toFloat().getX() + 8.0f, readout.toFloat().getCentreY()}),
+                              ink);
+        readout.removeFromLeft(20);
+    }
     g.setFont(readoutFont());
-    g.setColour(m_recording ? kRecordRed
-                : ready     ? theme::colours::accent
-                            : juce::Colour(0xff5f6872));
+    g.setColour(ink);
     g.drawText(readoutText(), readout, juce::Justification::centredRight);
 }
 

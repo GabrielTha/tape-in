@@ -29,10 +29,14 @@ public:
     void setWaveform(std::vector<float> envelope);
     /// The most recent sample written to disk; when valid, the bar is draggable.
     void setSample(const juce::File& file);
+    /// The written sample's envelope, shown frozen until the next recording.
+    void setSampleWaveform(std::vector<float> envelope);
 
     void resized() override;
     void paint(juce::Graphics& g) override;
     void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseMove(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
 
 private:
     class RecButton; ///< the round record/stop disc
@@ -43,7 +47,9 @@ private:
 
     std::unique_ptr<RecButton> m_rec;
     std::vector<float> m_wave;
+    std::vector<float> m_sampleWave; ///< frozen view of the last recording
     bool m_recording = false;
+    bool m_hover = false; ///< pointer over the (draggable) waveform trough
     int m_elapsed = 0;
     juce::File m_sample;
 

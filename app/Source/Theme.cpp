@@ -87,6 +87,21 @@ void reel(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c, float s
     strokeVb(g, box, c, stroke, p);
 }
 
+void dragOut(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c, float stroke)
+{
+    juce::Path p; // tray with an arrow pointing up and out
+    p.startNewSubPath(5, 12);
+    p.lineTo(5, 19);
+    p.lineTo(19, 19);
+    p.lineTo(19, 12);
+    p.startNewSubPath(12, 15);
+    p.lineTo(12, 4);
+    p.startNewSubPath(8, 8);
+    p.lineTo(12, 4);
+    p.lineTo(16, 8);
+    strokeVb(g, box, c, stroke, p);
+}
+
 void speakerLow(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour c, float stroke)
 {
     juce::Path p; // M4 9v6h4l5 4V5L8 9z

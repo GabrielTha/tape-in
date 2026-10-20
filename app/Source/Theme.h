@@ -58,6 +58,7 @@ void prev(juce::Graphics&, juce::Rectangle<float> box, juce::Colour, float strok
 void next(juce::Graphics&, juce::Rectangle<float> box, juce::Colour, float stroke = 1.7f);
 void play(juce::Graphics&, juce::Rectangle<float> box, juce::Colour);
 void pause(juce::Graphics&, juce::Rectangle<float> box, juce::Colour);
+void dragOut(juce::Graphics&, juce::Rectangle<float> box, juce::Colour, float stroke = 1.8f); ///< share/export tray
 } // namespace icons
 
 /// App-wide LookAndFeel: dark neumorphic colours for sliders, buttons, combos.

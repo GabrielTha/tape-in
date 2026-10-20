@@ -57,6 +57,25 @@ juce::File writeSampleToWav(const core::session::RecordedSample& s, const juce::
     return out;
 }
 
+// Peak envelope of a recorded sample, squeezed into `bins` bars for the
+// record bar's frozen after-take view.
+std::vector<float> sampleEnvelope(const core::session::RecordedSample& s, size_t bins)
+{
+    const size_t frames = s.channels > 0 ? s.interleaved.size() / s.channels : 0;
+    if (frames == 0 || bins == 0) {
+        return {};
+    }
+    std::vector<float> env(bins, 0.0f);
+    for (size_t i = 0; i < frames; ++i) {
+        const size_t bin = i * bins / frames;
+        for (uint32_t c = 0; c < s.channels; ++c) {
+            const float v = std::abs(static_cast<float>(s.interleaved[i * s.channels + c])) / 32768.0f;
+            env[bin] = std::max(env[bin], v);
+        }
+    }
+    return env;
+}
+
 core::session::BufferMode modeForIndex(int i)
 {
     switch (i) {
@@ -275,6 +294,7 @@ void MainComponent::toggleRecording(bool start)
     if (file.existsAsFile()) {
         m_lastSample = file;
         m_record.setSample(file);
+        m_record.setSampleWaveform(sampleEnvelope(sample, core::session::kWaveformBins));
     }
 }
 

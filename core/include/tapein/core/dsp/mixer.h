@@ -5,7 +5,9 @@
 
 #include "tapein/core/dsp/source_stream.h"
 
+#include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -26,6 +28,9 @@ struct MasterMeters {
 /// the audio thread has finished a render() that could have used it.
 class Mixer {
 public:
+    /// Bins of the playback envelope ring (~8 ms of audio each).
+    static constexpr size_t kEnvelopeBins = 256;
+
     explicit Mixer(uint32_t maxSources, uint32_t maxBlockFrames = SourceStream::kDefaultMaxBlock);
     ~Mixer();
     Mixer(const Mixer&) = delete;
@@ -55,6 +60,11 @@ public:
                 m_meters.peakR.exchange(0.0f, std::memory_order_relaxed)};
     }
 
+    /// Copies the rolling envelope of the rendered mix (0..1 peaks, oldest →
+    /// newest) into `out`. Driven by the audio clock, so it scrolls steadily
+    /// no matter how the network delivered the audio.
+    void playbackEnvelope(float* out, size_t bins) const noexcept;
+
 private:
     struct Retired {
         std::unique_ptr<SourceStream> source;
@@ -65,6 +75,10 @@ private:
 
     std::vector<std::atomic<SourceStream*>> m_slots;
     std::vector<Retired> m_retired; ///< control thread only
+    std::array<std::atomic<float>, kEnvelopeBins> m_envBins{};
+    std::atomic<uint64_t> m_envHead{0}; ///< completed envelope bins, ever
+    float m_envPeak = 0.0f;   ///< audio thread: peak of the bin being filled
+    uint32_t m_envFill = 0;   ///< audio thread: frames into the current bin
     std::vector<float> m_left; ///< scratch, maxBlockFrames
     std::vector<float> m_right;
     uint32_t m_maxBlock;

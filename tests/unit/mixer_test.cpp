@@ -210,3 +210,50 @@ TEST_CASE("master peaks accumulate until consumed")
     CHECK(l2 < 0.01f);
     CHECK(r2 < 0.01f);
 }
+
+TEST_CASE("playback envelope is dense and advances with rendered frames")
+{
+    Mixer m(4, 256);
+    const auto slot = m.add(toneSource(0.5f));
+    REQUIRE(slot.has_value());
+    settle(m);
+    // Keep topping the ring up while rendering more than one envelope window,
+    // like a live sender would (a big pre-filled ring trips the resync rule).
+    std::vector<int16_t> pcm(512 * 2);
+    for (uint32_t i = 0; i < 512; ++i) {
+        const auto v = static_cast<int16_t>(
+            std::lround(0.5 * 32767.0 * std::sin(2.0 * std::numbers::pi * 1000.0 * i / 44100.0)));
+        pcm[i * 2] = v;
+        pcm[i * 2 + 1] = v;
+    }
+    for (int i = 0; i < 190; ++i) {
+        Out o(2, 512);
+        m.render(o.ptrs.data(), 2, 512, 44100.0);
+        REQUIRE(m.source(*slot) != nullptr);
+        (void)m.source(*slot)->ring().write(pcm);
+    }
+    std::vector<float> env(Mixer::kEnvelopeBins);
+    m.playbackEnvelope(env.data(), env.size());
+    // More than a window of tone has rendered: every bin carries signal, with
+    // no comb gaps, regardless of how the packets that fed the ring arrived.
+    const auto dense = std::count_if(env.begin(), env.end(), [](float v) { return v > 0.2f; });
+    CHECK(static_cast<size_t>(dense) == env.size());
+}
+
+TEST_CASE("playback envelope scrolls out to silence when sources end")
+{
+    Mixer m(4, 256);
+    const auto slot = m.add(toneSource(0.5f));
+    REQUIRE(slot.has_value());
+    settle(m, 40);
+    m.remove(*slot);
+    // A window's worth of silent renders flushes the tone out of the view.
+    for (int i = 0; i < 220; ++i) {
+        Out o(2, 512);
+        m.render(o.ptrs.data(), 2, 512, 44100.0);
+    }
+    std::vector<float> env(Mixer::kEnvelopeBins);
+    m.playbackEnvelope(env.data(), env.size());
+    const auto loud = std::count_if(env.begin(), env.end(), [](float v) { return v > 0.1f; });
+    CHECK(loud == 0);
+}

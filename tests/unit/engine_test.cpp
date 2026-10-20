@@ -737,8 +737,15 @@ TEST_CASE("the input waveform preview fills with the live signal envelope")
     auto c = fx.client();
     REQUIRE(c.startStream(true).status == 200);
     REQUIRE(fx.pumpUntil([&] { return !fx.engine->sources().empty(); }));
-    feedTone(fx, c, 20);
+    feedTone(fx, c, 60);
     fx.pump(60ms);
+
+    // The preview follows playback: render the mixer as the audio device would.
+    std::vector<std::vector<float>> ch(2, std::vector<float>(512));
+    float* ptrs[2] = {ch[0].data(), ch[1].data()};
+    for (int i = 0; i < 35; ++i) {
+        fx.engine->mixer().render(ptrs, 2, 512, 44100.0);
+    }
 
     auto wave = fx.engine->inputWaveform();
     CHECK_FALSE(wave.empty());
@@ -749,25 +756,6 @@ TEST_CASE("the input waveform preview fills with the live signal envelope")
     CHECK(peak > 0.3f); // the loud tone shows in the preview envelope
 }
 
-TEST_CASE("the waveform preview scrolls with time, not with packet count")
-{
-    Fixture fx;
-    auto c = fx.client();
-    REQUIRE(c.startStream(true).status == 200);
-    REQUIRE(fx.pumpUntil([&] { return !fx.engine->sources().empty(); }));
-
-    const auto t0 = std::chrono::steady_clock::now();
-    feedTone(fx, c, 60);
-    const auto elapsedMs =
-        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
-
-    auto wave = fx.engine->inputWaveform();
-    const auto nonZero = static_cast<long long>(std::count_if(wave.begin(), wave.end(), [](float v) { return v > 0.0f; }));
-    CHECK(nonZero >= 1);
-    // Bins cover fixed 8 ms of wall time each: a burst of 60 packets must not
-    // paint 60 bins, only as many as the elapsed time allows (+2 slack).
-    CHECK(nonZero <= elapsedMs / 8 + 2);
-}
 
 TEST_CASE("a nameless sender is named from its resolved DACP host")
 {

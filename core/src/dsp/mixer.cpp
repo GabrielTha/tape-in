@@ -110,6 +110,20 @@ void Mixer::render(float* const* outputs, uint32_t numOutputs, uint32_t frames, 
     m_meters.callbacks.fetch_add(1, std::memory_order_acq_rel);
 }
 
+void Mixer::playbackEnvelope(float* out, size_t bins) const noexcept
+{
+    if (out == nullptr || bins == 0) {
+        return;
+    }
+    // Slot head % kEnvelopeBins holds the oldest completed bin (it is the one
+    // the audio thread overwrites next).
+    const uint64_t head = m_envHead.load(std::memory_order_acquire);
+    for (size_t i = 0; i < bins; ++i) {
+        const size_t src = (head + i * kEnvelopeBins / bins) % kEnvelopeBins;
+        out[i] = m_envBins[src].load(std::memory_order_relaxed);
+    }
+}
+
 void Mixer::renderChunk(float* const* outputs, uint32_t numOutputs, uint32_t frames, double sampleRate) noexcept
 {
     std::fill_n(m_left.data(), frames, 0.0f);
@@ -134,11 +148,23 @@ void Mixer::renderChunk(float* const* outputs, uint32_t numOutputs, uint32_t fra
 
     float peakL = 0.0f;
     float peakR = 0.0f;
+    // ~8 ms of frames per envelope bin, on the audio clock.
+    const auto binFrames = std::max<uint32_t>(1, static_cast<uint32_t>(sampleRate * 0.008));
     for (uint32_t i = 0; i < frames; ++i) {
         m_left[i] = softClip(m_left[i]);
         m_right[i] = softClip(m_right[i]);
-        peakL = std::max(peakL, std::abs(m_left[i]));
-        peakR = std::max(peakR, std::abs(m_right[i]));
+        const float al = std::abs(m_left[i]);
+        const float ar = std::abs(m_right[i]);
+        peakL = std::max(peakL, al);
+        peakR = std::max(peakR, ar);
+        m_envPeak = std::max(m_envPeak, std::max(al, ar));
+        if (++m_envFill >= binFrames) {
+            const uint64_t head = m_envHead.load(std::memory_order_relaxed);
+            m_envBins[head % kEnvelopeBins].store(m_envPeak, std::memory_order_relaxed);
+            m_envHead.store(head + 1, std::memory_order_release);
+            m_envPeak = 0.0f;
+            m_envFill = 0;
+        }
     }
     // Accumulate (atomic max) so consumePeaks() sees the loudest moment
     // between UI reads; the UI resets by exchanging to zero.

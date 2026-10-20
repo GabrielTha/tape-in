@@ -154,8 +154,9 @@ public:
     void startRecording();
     [[nodiscard]] RecordedSample stopRecording();
     [[nodiscard]] RecordStatus recordStatus() const;
-    /// A rolling envelope (0..1 peaks, oldest → newest) of the recent input,
-    /// for the record bar's live waveform; maintained whether or not recording.
+    /// A rolling envelope (0..1 peaks, oldest → newest) of the recent
+    /// playback, for the record bar's live waveform. Driven by the audio
+    /// clock (the mixer render), so it scrolls steadily.
     [[nodiscard]] std::vector<float> inputWaveform() const;
 
     void setUserGainDb(uint64_t sourceId, float dB);
@@ -251,9 +252,6 @@ private:
     // to int16. m_waveform is a rolling peak envelope for the live preview.
     bool m_recording = false;
     std::vector<int32_t> m_recordMix; ///< interleaved stereo mix accumulator
-    std::array<float, kWaveformBins> m_waveform{};
-    size_t m_waveformHead = 0; ///< bin currently filling
-    std::chrono::steady_clock::time_point m_waveformTime{}; ///< start of the filling bin
     bool m_running = false;
     bool m_gcScheduled = false;
     net::Reactor::TimerId m_statsTimer = 0;

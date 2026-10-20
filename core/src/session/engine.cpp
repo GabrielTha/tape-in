@@ -350,12 +350,8 @@ RecordStatus Engine::recordStatus() const
 
 std::vector<float> Engine::inputWaveform() const
 {
-    std::lock_guard<std::mutex> lock(m_mutex);
     std::vector<float> out(kWaveformBins);
-    // Oldest first; the bin after the one currently filling is the oldest.
-    for (size_t i = 0; i < kWaveformBins; ++i) {
-        out[i] = m_waveform[(m_waveformHead + 1 + i) % kWaveformBins];
-    }
+    m_mixer.playbackEnvelope(out.data(), out.size());
     return out;
 }
 
@@ -614,30 +610,6 @@ void Engine::onPcm(uint64_t sessionId, const buffer::ReleasedBlock& block)
         return;
     }
     src->stream->ring().write(block.pcm);
-
-    // Live input preview: one peak bin per block, the max across all sources
-    // that land in the same slot, so the waveform tracks whatever is streaming.
-    int16_t blockPeak = 0;
-    for (int16_t s : block.pcm) {
-        blockPeak = std::max<int16_t>(blockPeak, static_cast<int16_t>(std::abs(s)));
-    }
-    const float peak = static_cast<float>(blockPeak) / 32768.0f;
-    // Bins cover fixed 8 ms of wall time, so the preview scrolls steadily no
-    // matter how bursty the packets arrive or how many sources feed it.
-    constexpr auto kBinDuration = std::chrono::milliseconds(8);
-    const auto now = std::chrono::steady_clock::now();
-    if (m_waveformTime == std::chrono::steady_clock::time_point{}
-        || now - m_waveformTime > kBinDuration * kWaveformBins) {
-        m_waveform.fill(0.0f); // first block, or a gap longer than the window
-        m_waveformTime = now;
-    }
-    while (now - m_waveformTime >= kBinDuration) {
-        m_waveformTime += kBinDuration;
-        m_waveformHead = (m_waveformHead + 1) % kWaveformBins;
-        m_waveform[m_waveformHead] = 0.0f;
-    }
-    float& bin = m_waveform[m_waveformHead];
-    bin = std::max(bin, peak);
 
     if (!m_recording) {
         return;

@@ -295,6 +295,66 @@ void Engine::declineConnection(uint64_t sourceId)
     });
 }
 
+void Engine::startRecording()
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_recordMix.clear();
+    m_recordMix.reserve(static_cast<size_t>(kMaxRecordSeconds) * 44100u * 2u);
+    // Sources already live at the downbeat start together at offset 0, so their
+    // blocks mix-add on a shared timeline; a source that joins later is aligned
+    // to the mix's length on its first block (onPcm).
+    for (auto& [dacp, src] : m_sources) {
+        src->recordPos = 0;
+        src->recordJoined = src->live;
+    }
+    m_recording = true;
+}
+
+RecordedSample Engine::stopRecording()
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    RecordedSample out;
+    if (!m_recording) {
+        return out; // nothing was being captured
+    }
+    m_recording = false;
+    out.interleaved.resize(m_recordMix.size());
+    for (size_t i = 0; i < m_recordMix.size(); ++i) {
+        out.interleaved[i] = static_cast<int16_t>(std::clamp(m_recordMix[i], -32768, 32767));
+    }
+    m_recordMix.clear();
+    m_recordMix.shrink_to_fit();
+    // Name the capture after whatever live source carries now-playing metadata.
+    for (auto& [dacp, src] : m_sources) {
+        if (src->live && !src->metadata.trackName.empty()) {
+            out.trackName = src->metadata.trackName;
+            out.artist = src->metadata.artist;
+            out.album = src->metadata.album;
+            break;
+        }
+    }
+    return out;
+}
+
+RecordStatus Engine::recordStatus() const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    RecordStatus st;
+    st.recording = m_recording;
+    st.frames = static_cast<uint32_t>(m_recordMix.size() / 2);
+    return st;
+}
+
+std::vector<float> Engine::inputWaveform() const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    std::vector<float> out(kWaveformBins);
+    for (size_t i = 0; i < kWaveformBins; ++i) {
+        out[i] = m_waveform[(m_waveformHead + i) % kWaveformBins];
+    }
+    return out;
+}
+
 void Engine::setUserGainDb(uint64_t sourceId, float dB)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -495,9 +555,44 @@ void Engine::onPcm(uint64_t sessionId, const buffer::ReleasedBlock& block)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     Source* src = bySession(sessionId);
-    if (src != nullptr && src->stream != nullptr) {
-        src->stream->ring().write(block.pcm);
+    if (src == nullptr || src->stream == nullptr) {
+        return;
     }
+    src->stream->ring().write(block.pcm);
+
+    // Live input preview: one peak bin per block, the max across all sources
+    // that land in the same slot, so the waveform tracks whatever is streaming.
+    int16_t blockPeak = 0;
+    for (int16_t s : block.pcm) {
+        blockPeak = std::max<int16_t>(blockPeak, static_cast<int16_t>(std::abs(s)));
+    }
+    const float peak = static_cast<float>(blockPeak) / 32768.0f;
+    float& bin = m_waveform[m_waveformHead];
+    bin = std::max(bin, peak);
+    m_waveformHead = (m_waveformHead + 1) % kWaveformBins;
+    m_waveform[m_waveformHead] = 0.0f; // clear the next slot before it fills
+
+    if (!m_recording) {
+        return;
+    }
+    // Reactor thread, under m_mutex: mix-add this source's clean PCM into the
+    // shared accumulator at its own cursor (capacity reserved on start).
+    if (!src->recordJoined) {
+        src->recordPos = m_recordMix.size();
+        src->recordJoined = true;
+    }
+    const size_t cap = static_cast<size_t>(kMaxRecordSeconds) * 44100u * 2u;
+    if (src->recordPos + block.pcm.size() > cap) {
+        m_recording = false; // hit the safety cap
+        return;
+    }
+    if (src->recordPos + block.pcm.size() > m_recordMix.size()) {
+        m_recordMix.resize(src->recordPos + block.pcm.size(), 0);
+    }
+    for (size_t i = 0; i < block.pcm.size(); ++i) {
+        m_recordMix[src->recordPos + i] += block.pcm[i];
+    }
+    src->recordPos += block.pcm.size();
 }
 
 void Engine::onVolume(uint64_t sessionId, float dB)

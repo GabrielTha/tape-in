@@ -14,6 +14,7 @@
 #include "tapein/core/session/receiver.h"
 #include "tapein/core/util/result.h"
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -77,6 +78,29 @@ struct SourceSnapshot {
     uint32_t durationSeconds = 0;
 };
 
+/// Audio captured by a manual recording: the clean (pre-fader) mix of every
+/// live source, summed on the reactor thread.
+struct RecordedSample {
+    std::vector<int16_t> interleaved; ///< stereo, interleaved
+    uint32_t sampleRate = 44100;
+    uint32_t channels = 2;
+    std::string trackName; ///< now-playing snapshot at stop, for naming
+    std::string artist;
+    std::string album;
+};
+
+/// Live state of the single, global recording, for the UI.
+struct RecordStatus {
+    bool recording = false;
+    uint32_t frames = 0; ///< frames captured so far (interleaved size / channels)
+};
+
+/// Safety cap on a manual recording (auto-stops to bound memory).
+inline constexpr uint32_t kMaxRecordSeconds = 60;
+
+/// Number of envelope bins the input-waveform preview keeps (oldest → newest).
+inline constexpr size_t kWaveformBins = 256;
+
 struct EngineEvent {
     enum class Kind { sourceAdded, sourceChanged, sourceRemoved, receiverStarted, receiverError, log };
     Kind kind;
@@ -124,6 +148,16 @@ public:
     /// Reject a pending source: tear down its RTSP session and remove it now.
     void declineConnection(uint64_t sourceId);
 
+    /// Manual sampling (global): capture the clean (pre-fader) mix of every
+    /// live source. start clears and arms; stop disarms and returns the capture
+    /// (empty if nothing was recording). Auto-stops at kMaxRecordSeconds.
+    void startRecording();
+    [[nodiscard]] RecordedSample stopRecording();
+    [[nodiscard]] RecordStatus recordStatus() const;
+    /// A rolling envelope (0..1 peaks, oldest → newest) of the recent input,
+    /// for the record bar's live waveform; maintained whether or not recording.
+    [[nodiscard]] std::vector<float> inputWaveform() const;
+
     void setUserGainDb(uint64_t sourceId, float dB);
     void setMute(uint64_t sourceId, bool mute);
     void setSolo(uint64_t sourceId, bool solo);
@@ -160,6 +194,8 @@ private:
         uint64_t sessionId = 0;
         uint32_t slot = UINT32_MAX;
         bool pending = false; ///< awaiting allow/decline; held silent until approved
+        size_t recordPos = 0;     ///< write cursor (interleaved samples) into m_recordMix for the current recording
+        bool recordJoined = false; ///< recordPos initialised for the current recording
         dsp::SourceStream* stream = nullptr; ///< owned by the mixer; touched only under m_mutex (never the audio thread)
         bool live = false;
         float userGainDb = 0.0f;
@@ -206,6 +242,14 @@ private:
     uint64_t m_nextSourceId = 1;
     std::string m_name;
     std::string m_lastError;
+
+    // Global sampling (reactor thread / under m_mutex). m_recordMix accumulates
+    // the summed clean PCM as int32 (headroom for mixing) until stop clamps it
+    // to int16. m_waveform is a rolling peak envelope for the live preview.
+    bool m_recording = false;
+    std::vector<int32_t> m_recordMix; ///< interleaved stereo mix accumulator
+    std::array<float, kWaveformBins> m_waveform{};
+    size_t m_waveformHead = 0; ///< next write index into the ring
     bool m_running = false;
     bool m_gcScheduled = false;
     net::Reactor::TimerId m_statsTimer = 0;

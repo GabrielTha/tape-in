@@ -696,3 +696,55 @@ TEST_CASE("declining a pending connection ends the session and removes the sourc
     CHECK(std::any_of(events.begin(), events.end(),
                       [id](const EngineEvent& e) { return e.kind == EngineEvent::Kind::sourceRemoved && e.sourceId == id; }));
 }
+
+TEST_CASE("global recording captures the clean input between start and stop")
+{
+    Fixture fx;
+    auto c = fx.client();
+    REQUIRE(c.startStream(true).status == 200);
+    REQUIRE(fx.pumpUntil([&] { return !fx.engine->sources().empty(); }));
+    CHECK_FALSE(fx.engine->recordStatus().recording);
+
+    fx.engine->startRecording();
+    CHECK(fx.engine->recordStatus().recording);
+    feedTone(fx, c, 30);
+    fx.pump(80ms);
+    CHECK(fx.engine->recordStatus().frames >= 10u * kFrames);
+    auto sample = fx.engine->stopRecording();
+
+    CHECK_FALSE(fx.engine->recordStatus().recording);
+    CHECK(sample.channels == 2);
+    CHECK(sample.sampleRate == 44100);
+    CHECK(sample.interleaved.size() >= 10u * kFrames * 2u); // most of the fed tone
+    int16_t peak = 0;
+    for (int16_t s : sample.interleaved) {
+        peak = std::max<int16_t>(peak, static_cast<int16_t>(std::abs(s)));
+    }
+    CHECK(peak > 10000); // the loud tone, captured clean
+}
+
+TEST_CASE("stopRecording without an active recording yields nothing")
+{
+    Fixture fx;
+    auto sample = fx.engine->stopRecording();
+    CHECK(sample.interleaved.empty());
+    CHECK_FALSE(fx.engine->recordStatus().recording);
+}
+
+TEST_CASE("the input waveform preview fills with the live signal envelope")
+{
+    Fixture fx;
+    auto c = fx.client();
+    REQUIRE(c.startStream(true).status == 200);
+    REQUIRE(fx.pumpUntil([&] { return !fx.engine->sources().empty(); }));
+    feedTone(fx, c, 20);
+    fx.pump(60ms);
+
+    auto wave = fx.engine->inputWaveform();
+    CHECK_FALSE(wave.empty());
+    float peak = 0.0f;
+    for (float v : wave) {
+        peak = std::max(peak, v);
+    }
+    CHECK(peak > 0.3f); // the loud tone shows in the preview envelope
+}

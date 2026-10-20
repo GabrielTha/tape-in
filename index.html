@@ -94,11 +94,10 @@
   .dl:active { transform: translateY(1px); }
   .ghost {
     display: inline-block; text-decoration: none; color: var(--text);
-    font-weight: 600; font-size: 14px; padding: 15px 28px; border-radius: 999px; background: var(--slot);
-    box-shadow: 6px 6px 14px rgba(0,0,0,.45), -2px -2px 8px rgba(255,255,255,.04);
-    transition: transform .15s ease, color .15s ease;
+    font-weight: 600; font-size: 14px; padding: 15px 6px;
+    transition: color .15s ease;
   }
-  .ghost:hover { color: var(--accent); transform: translateY(-2px); }
+  .ghost:hover { color: var(--accent); }
   .meta { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12.5px; font-weight: 600; color: var(--dim); }
   @media (max-width: 880px) { .meta { justify-content: center; } }
 
@@ -119,21 +118,6 @@
     filter: drop-shadow(0 34px 60px rgba(0,0,0,.7)) drop-shadow(0 0 70px rgba(224,163,92,.12));
   }
 
-  /* ---- ticker ---- */
-  .ticker {
-    border-block: 1px solid rgba(255,255,255,.05); background: var(--inset);
-    overflow: hidden; position: relative; z-index: 1;
-  }
-  .ticker .track {
-    display: flex; gap: 48px; width: max-content; padding-block: 16px;
-    font-family: "Boldonse", "Inter", sans-serif; font-size: 11px; letter-spacing: .18em;
-    color: var(--dim); white-space: nowrap;
-    animation: tick 36s linear infinite;
-  }
-  .ticker:hover .track { animation-play-state: paused; }
-  .ticker .track span.dot { color: var(--accent); }
-  @keyframes tick { to { transform: translateX(-50%); } }
-  @media (prefers-reduced-motion: reduce) { .ticker .track { animation: none; } }
 
   /* ---- sections ---- */
   section { padding-block: 72px 24px; }
@@ -305,16 +289,6 @@
   </div>
 </div>
 
-<div class="ticker" aria-hidden="true">
-  <div class="track" id="track">
-    <span>LOSSLESS 44.1 kHz</span><span class="dot">●</span>
-    <span>MULTI-SOURCE MIXING</span><span class="dot">●</span>
-    <span>SAMPLING &amp; DRAG-OUT</span><span class="dot">●</span>
-    <span>REMOTE TRANSPORT</span><span class="dot">●</span>
-    <span>BLACKHOLE READY</span><span class="dot">●</span>
-    <span>FREE &amp; OPEN SOURCE</span><span class="dot">●</span>
-  </div>
-</div>
 
 <div class="wrap">
   <section id="features">
@@ -459,12 +433,6 @@
     raf = alive ? requestAnimationFrame(frame) : 0;
   }
   raf = requestAnimationFrame(frame);
-})();
-
-/* ---- ticker: duplicate the track so the loop is seamless ---- */
-(function () {
-  const t = document.getElementById('track');
-  t.innerHTML += t.innerHTML;
 })();
 
 /* ---- sampling waveform bars ---- */

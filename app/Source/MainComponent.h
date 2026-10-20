@@ -72,7 +72,7 @@ private:
     juce::Component m_rowHost;
     std::vector<std::unique_ptr<SourceRow>> m_rows;
 
-    // Master output meter, directly above the record bar.
+    // Master output meter, directly below the record bar.
     LevelMeter m_master;
 
     // Global sampling bar (above the footer).

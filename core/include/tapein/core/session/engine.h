@@ -249,7 +249,8 @@ private:
     bool m_recording = false;
     std::vector<int32_t> m_recordMix; ///< interleaved stereo mix accumulator
     std::array<float, kWaveformBins> m_waveform{};
-    size_t m_waveformHead = 0; ///< next write index into the ring
+    size_t m_waveformHead = 0; ///< bin currently filling
+    std::chrono::steady_clock::time_point m_waveformTime{}; ///< start of the filling bin
     bool m_running = false;
     bool m_gcScheduled = false;
     net::Reactor::TimerId m_statsTimer = 0;

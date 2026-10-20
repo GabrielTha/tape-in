@@ -168,7 +168,7 @@ MainComponent::MainComponent(AppEngine& app, Settings& settings) : m_app(app), m
     m_viewport.setScrollBarsShown(true, false);
     addAndMakeVisible(m_viewport);
 
-    // Master output meter above the global sampling bar.
+    // Master output meter below the global sampling bar.
     addAndMakeVisible(m_master);
 
     // Global sampling bar (above the footer).
@@ -393,10 +393,10 @@ void MainComponent::resized()
     m_donateBtn->setBounds(footer.removeFromRight(104).withSizeKeepingCentre(104, 30));
     m_status.setBounds(footer.withTrimmedRight(10));
 
-    // Global record bar, directly above the footer (full width, horizontal),
-    // with the master output meter strip right above it.
-    m_record.setBounds(r.removeFromBottom(68));
+    // Global record bar above the footer (full width, horizontal), with the
+    // master output meter strip right below it.
     m_master.setBounds(r.removeFromBottom(14).reduced(18, 2));
+    m_record.setBounds(r.removeFromBottom(68));
 
     // Source list. Trim the top so the header-to-first-slot gap matches the
     // inter-slot gap: slots are kRowHeight apart with a (kRowHeight - rowH) +

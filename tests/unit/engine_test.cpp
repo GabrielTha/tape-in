@@ -748,3 +748,23 @@ TEST_CASE("the input waveform preview fills with the live signal envelope")
     }
     CHECK(peak > 0.3f); // the loud tone shows in the preview envelope
 }
+
+TEST_CASE("the waveform preview scrolls with time, not with packet count")
+{
+    Fixture fx;
+    auto c = fx.client();
+    REQUIRE(c.startStream(true).status == 200);
+    REQUIRE(fx.pumpUntil([&] { return !fx.engine->sources().empty(); }));
+
+    const auto t0 = std::chrono::steady_clock::now();
+    feedTone(fx, c, 60);
+    const auto elapsedMs =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+
+    auto wave = fx.engine->inputWaveform();
+    const auto nonZero = static_cast<long long>(std::count_if(wave.begin(), wave.end(), [](float v) { return v > 0.0f; }));
+    CHECK(nonZero >= 1);
+    // Bins cover fixed 8 ms of wall time each: a burst of 60 packets must not
+    // paint 60 bins, only as many as the elapsed time allows (+2 slack).
+    CHECK(nonZero <= elapsedMs / 8 + 2);
+}

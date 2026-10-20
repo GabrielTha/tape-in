@@ -19,7 +19,8 @@ juce_add_gui_app(TapeIn
 
 juce_add_binary_data(TapeInData SOURCES
     Resources/fonts/Boldonse.ttf
-    Resources/images/tapein_logo.png)
+    Resources/images/tapein_logo.png
+    Resources/images/gabriel_avatar.png)
 
 target_sources(TapeIn PRIVATE
     Source/Main.cpp
@@ -27,11 +28,13 @@ target_sources(TapeIn PRIVATE
     Source/AudioOutput.cpp
     Source/AppEngine.cpp
     Source/Theme.cpp
+    Source/PixelCanvas.cpp
     Source/LevelMeter.cpp
     Source/SourceRow.cpp
     Source/RecordBar.cpp
     Source/DeviceButton.cpp
     Source/SettingsModal.cpp
+    Source/DonateModal.cpp
     Source/MainComponent.cpp
     Source/TrayIcon.cpp
     Source/AboutComponent.cpp

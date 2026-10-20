@@ -105,9 +105,34 @@ public:
     }
 };
 
+// The footer's raised amber DONATE pill, the one loud control in the app.
+class MainComponent::DonateButton final : public juce::Button {
+public:
+    DonateButton() : juce::Button({}) {}
+    void paintButton(juce::Graphics& g, bool highlighted, bool down) override
+    {
+        auto b = getLocalBounds().toFloat().reduced(2.0f);
+        auto fill = theme::colours::accent;
+        if (highlighted) {
+            fill = fill.brighter(0.08f);
+        }
+        if (down) {
+            theme::drawInset(g, b, b.getHeight() * 0.5f, fill);
+        } else {
+            theme::drawRaised(g, b, b.getHeight() * 0.5f, fill);
+        }
+        g.setColour(juce::Colour(0xff1a1208));
+        g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
+        g.drawText("DONATE", b, juce::Justification::centred);
+    }
+};
+
 MainComponent::MainComponent(AppEngine& app, Settings& settings) : m_app(app), m_settings(settings)
 {
     setLookAndFeel(&m_lnf);
+
+    addAndMakeVisible(m_pixels);
+    addMouseListener(this, true); // child moves reach mouseMove() below
 
     m_device.onSelect = [this](const juce::String& name) { m_app.audio().selectOutput(name); };
     addAndMakeVisible(m_device);
@@ -143,25 +168,24 @@ MainComponent::MainComponent(AppEngine& app, Settings& settings) : m_app(app), m
     m_record.onToggle = [this](bool start) { toggleRecording(start); };
     addAndMakeVisible(m_record);
 
-    // Buffer-mode footer (a segmented control painted over an inset trough).
-    for (int i = 0; i < 3; ++i) {
-        auto& b = m_buffer[static_cast<size_t>(i)];
-        b.setClickingTogglesState(true);
-        b.setRadioGroupId(42);
-        b.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
-        b.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
-        b.setColour(juce::TextButton::textColourOffId, juce::Colour(0xff8b929c));
-        b.setColour(juce::TextButton::textColourOnId, theme::colours::text);
-        b.onClick = [this, i] { selectBuffer(i); };
-        addAndMakeVisible(b);
-    }
+    // Footer: the colour-coded status in the bottom-left corner and the
+    // DONATE pill on the right. The buffer mode now lives in Settings.
     m_bufferIndex = indexForMode(m_settings.bufferMode());
-    m_buffer[static_cast<size_t>(m_bufferIndex)].setToggleState(true, juce::dontSendNotification);
 
     m_status.setFont(juce::FontOptions(11.0f));
     m_status.setColour(juce::Label::textColourId, juce::Colour(0xff5f6872));
-    m_status.setJustificationType(juce::Justification::centredRight);
+    m_status.setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(m_status);
+
+    m_donateBtn = std::make_unique<DonateButton>();
+    m_donateBtn->onClick = [this] {
+        m_donate.setVisible(true);
+        m_donate.toFront(true);
+    };
+    addAndMakeVisible(*m_donateBtn);
+
+    m_donate.onClose = [this] { m_donate.setVisible(false); };
+    addChildComponent(m_donate);
 
     refreshOutputs();
     setSize(500, 792); // after every child exists: setSize drives resized()
@@ -194,6 +218,7 @@ void MainComponent::openSettings(bool open)
         v.askBeforeAccept = m_settings.askBeforeAccept();
         v.samplesFolder = m_settings.samplesFolder().getFullPathName();
         v.audioDevice = m_app.audio().currentOutputName();
+        v.bufferIndex = m_bufferIndex;
         m_modal.setAudioDevices(m_app.audio().outputDeviceNames());
         m_modal.setValues(v);
     }
@@ -226,6 +251,8 @@ void MainComponent::applySettings(const SettingsModal::Values& v)
     if (v.audioDevice.isNotEmpty() && v.audioDevice != m_app.audio().currentOutputName()) {
         m_app.audio().selectOutput(v.audioDevice);
     }
+
+    selectBuffer(juce::jlimit(0, 2, v.bufferIndex));
 }
 
 void MainComponent::toggleRecording(bool start)
@@ -291,11 +318,16 @@ void MainComponent::timerCallback()
         // (an implicit const char* was rendering the ellipsis as mojibake).
         m_status.setText(juce::String(juce::CharPointer_UTF8("Waiting for a device\xe2\x80\xa6")),
                          juce::dontSendNotification);
+        m_status.setColour(juce::Label::textColourId, juce::Colour(0xff5f6872)); // idle: dim
     } else {
         const juce::String sep = juce::CharPointer_UTF8(" \xc2\xb7 ");
         const juce::String unit = m_liveCount == 1 ? " source" : " sources";
         m_status.setText(juce::String(m_liveCount) + unit + sep + latencyFor(m_bufferIndex) + " s latency",
                          juce::dontSendNotification);
+        m_status.setColour(juce::Label::textColourId, juce::Colour(0xff79b98a)); // live: green
+    }
+    if (!m_app.lastError().isEmpty()) {
+        m_status.setColour(juce::Label::textColourId, juce::Colour(0xffe4572e)); // error: red
     }
 
     const bool denied = !m_app.lastError().isEmpty();
@@ -309,9 +341,20 @@ void MainComponent::timerCallback()
     }
 }
 
+void MainComponent::mouseMove(const juce::MouseEvent& e)
+{
+    m_pixels.pointerAt(e.getEventRelativeTo(&m_pixels).position);
+}
+
+void MainComponent::mouseDrag(const juce::MouseEvent& e)
+{
+    m_pixels.pointerAt(e.getEventRelativeTo(&m_pixels).position);
+}
+
 void MainComponent::resized()
 {
     auto r = getLocalBounds();
+    m_pixels.setBounds(r);
 
     // Top bar.
     auto bar = r.removeFromTop(64).reduced(18, 0);
@@ -325,16 +368,10 @@ void MainComponent::resized()
         m_openSettings.setBounds(b.removeFromTop(24).removeFromLeft(180));
     }
 
-    // Footer.
+    // Footer: status bottom-left, DONATE bottom-right.
     auto footer = r.removeFromBottom(60).reduced(18, 14);
-    footer.removeFromLeft(52); // "BUFFER" label (painted)
-    auto trough = footer.removeFromLeft(210);
-    auto seg = trough.reduced(4);
-    const int sw = seg.getWidth() / 3;
-    for (int i = 0; i < 3; ++i) {
-        m_buffer[static_cast<size_t>(i)].setBounds(seg.removeFromLeft(i == 2 ? seg.getWidth() : sw).reduced(1));
-    }
-    m_status.setBounds(footer.withTrimmedLeft(10));
+    m_donateBtn->setBounds(footer.removeFromRight(104).withSizeKeepingCentre(104, 30));
+    m_status.setBounds(footer.withTrimmedRight(10));
 
     // Global record bar, directly above the footer (full width, horizontal).
     m_record.setBounds(r.removeFromBottom(68));
@@ -354,6 +391,7 @@ void MainComponent::resized()
     }
 
     m_modal.setBounds(getLocalBounds());
+    m_donate.setBounds(getLocalBounds());
 }
 
 void MainComponent::paint(juce::Graphics& g)
@@ -374,18 +412,6 @@ void MainComponent::paint(juce::Graphics& g)
     g.setColour(juce::Colour(0x0affffff));
     g.fillRect(0, 63, getWidth(), 1);
 
-    // Footer: "BUFFER" label + segmented trough + active pill.
-    g.setColour(juce::Colour(0xff5f6872));
-    g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
-    const auto troughRect =
-        m_buffer[0].getBounds().getUnion(m_buffer[2].getBounds()).toFloat().expanded(4.0f, 4.0f);
-    g.drawText("BUFFER", juce::Rectangle<int>(18, troughRect.getY(), 50, static_cast<int>(troughRect.getHeight())),
-               juce::Justification::centredLeft);
-    theme::drawInset(g, troughRect, 11.0f, theme::colours::inset);
-    if (m_bufferIndex >= 0 && m_bufferIndex < 3) {
-        theme::drawRaised(g, m_buffer[static_cast<size_t>(m_bufferIndex)].getBounds().toFloat().reduced(1.0f), 8.0f,
-                          theme::colours::slot);
-    }
 }
 
 } // namespace tapein::app

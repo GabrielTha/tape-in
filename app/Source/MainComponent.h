@@ -5,6 +5,8 @@
 
 #include "AppEngine.h"
 #include "DeviceButton.h"
+#include "DonateModal.h"
+#include "PixelCanvas.h"
 #include "RecordBar.h"
 #include "Settings.h"
 #include "SettingsModal.h"
@@ -31,9 +33,12 @@ public:
 
     void resized() override;
     void paint(juce::Graphics& g) override;
+    void mouseMove(const juce::MouseEvent& e) override;
+    void mouseDrag(const juce::MouseEvent& e) override;
 
 private:
     class GearButton; ///< raised square painting the gear icon
+    class DonateButton; ///< raised amber pill opening the donate overlay
 
     void timerCallback() override;
     void refreshOutputs();
@@ -46,6 +51,9 @@ private:
     AppEngine& m_app;
     Settings& m_settings;
     theme::NeumorphicLookAndFeel m_lnf;
+
+    // Decorative pixel grid behind everything.
+    PixelCanvas m_pixels;
 
     // Top bar
     DeviceButton m_device;
@@ -67,11 +75,11 @@ private:
     RecordBar m_record;
     juce::File m_lastSample; ///< the most recent sample written, for drag-out
 
-    // Buffer-mode footer
-    std::array<juce::TextButton, 3> m_buffer{juce::TextButton{"Sync"}, juce::TextButton{"Short"},
-                                             juce::TextButton{"Monitor"}};
+    // Footer: colour-coded status (left) and the DONATE button (right).
     int m_bufferIndex = 0;
     juce::Label m_status;
+    std::unique_ptr<DonateButton> m_donateBtn;
+    DonateModal m_donate;
     int m_liveCount = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)

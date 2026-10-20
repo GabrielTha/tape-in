@@ -5,6 +5,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <array>
 #include <functional>
 
 namespace tapein::app {
@@ -23,6 +24,7 @@ public:
         bool askBeforeAccept = false;
         juce::String samplesFolder;
         juce::String audioDevice;
+        int bufferIndex = 0; ///< 0 Sync, 1 Short, 2 Monitor
     };
 
     SettingsModal();
@@ -55,6 +57,9 @@ private:
     std::unique_ptr<juce::FileChooser> m_chooser;
     juce::String m_folderPath;
     std::unique_ptr<Dropdown> m_audio;
+    std::array<juce::TextButton, 3> m_buffer{juce::TextButton{"Sync"}, juce::TextButton{"Short"},
+                                             juce::TextButton{"Monitor"}};
+    int m_bufferIndex = 0;
     std::unique_ptr<Dropdown> m_out1;
     std::unique_ptr<Dropdown> m_out2;
     juce::TextButton m_save{"Save"};

@@ -117,6 +117,23 @@ SettingsModal::SettingsModal()
     };
     addAndMakeVisible(*m_audio);
 
+    // Buffer-mode segmented control (same trough-and-pill look as the old
+    // footer; the trough and the active pill are painted in paint()).
+    for (int i = 0; i < 3; ++i) {
+        auto& b = m_buffer[static_cast<size_t>(i)];
+        b.setClickingTogglesState(true);
+        b.setRadioGroupId(43);
+        b.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+        b.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+        b.setColour(juce::TextButton::textColourOffId, juce::Colour(0xff8b929c));
+        b.setColour(juce::TextButton::textColourOnId, theme::colours::text);
+        b.onClick = [this, i] {
+            m_bufferIndex = i;
+            repaint();
+        };
+        addAndMakeVisible(b);
+    }
+
     m_out1 = std::make_unique<Dropdown>();
     m_out1->setText("Output 1");
     m_out1->inert = true;
@@ -152,6 +169,8 @@ void SettingsModal::setValues(const Values& v)
     m_folderPath = v.samplesFolder;
     m_folder->setText(juce::File(v.samplesFolder).getFileName());
     m_audio->setText(v.audioDevice);
+    m_bufferIndex = juce::jlimit(0, 2, v.bufferIndex);
+    m_buffer[static_cast<size_t>(m_bufferIndex)].setToggleState(true, juce::dontSendNotification);
     relayout();
 }
 
@@ -167,13 +186,14 @@ SettingsModal::Values SettingsModal::gather() const
     v.askBeforeAccept = m_ask->getToggleState();
     v.samplesFolder = m_folderPath;
     v.audioDevice = m_audio->text();
+    v.bufferIndex = m_bufferIndex;
     return v;
 }
 
 juce::Rectangle<int> SettingsModal::cardBounds() const
 {
     const bool pw = m_restrict->getToggleState();
-    const int h = pw ? 602 : 546;
+    const int h = pw ? 658 : 602;
     return juce::Rectangle<int>(28, 56, getWidth() - 56, h);
 }
 
@@ -213,6 +233,11 @@ void SettingsModal::resized()
     m_exclusive->setBounds(row(40).removeFromLeft(28).withSizeKeepingCentre(28, 28));
     m_ask->setBounds(row(40).removeFromLeft(28).withSizeKeepingCentre(28, 28));
     m_audio->setBounds(row(40));
+    auto seg = row(40).removeFromLeft(210).reduced(4);
+    const int sw = seg.getWidth() / 3;
+    for (int i = 0; i < 3; ++i) {
+        m_buffer[static_cast<size_t>(i)].setBounds(seg.removeFromLeft(i == 2 ? seg.getWidth() : sw).reduced(1));
+    }
     m_folder->setBounds(row(40));
     auto outputs = row(40);
     const int half = (outputs.getWidth() - 12) / 2;
@@ -250,8 +275,18 @@ void SettingsModal::paint(juce::Graphics& g)
     labelFor(*m_exclusive, "Exclusive solo");
     labelFor(*m_ask, "Ask to connect");
     labelFor(*m_audio, "Audio device");
+    labelFor(m_buffer[0], "Buffer");
     labelFor(*m_folder, "Samples folder");
     labelFor(*m_out1, "Output");
+
+    // Buffer trough and the raised pill under the active segment.
+    const auto troughRect =
+        m_buffer[0].getBounds().getUnion(m_buffer[2].getBounds()).toFloat().expanded(4.0f, 4.0f);
+    theme::drawInset(g, troughRect, 11.0f, theme::colours::inset);
+    if (m_bufferIndex >= 0 && m_bufferIndex < 3) {
+        theme::drawRaised(g, m_buffer[static_cast<size_t>(m_bufferIndex)].getBounds().toFloat().reduced(1.0f), 8.0f,
+                          theme::colours::slot);
+    }
 }
 
 } // namespace tapein::app

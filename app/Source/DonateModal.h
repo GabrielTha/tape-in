@@ -30,6 +30,8 @@ private:
 
     juce::Image m_avatar;
     std::unique_ptr<AccentButton> m_donate;
+    juce::HyperlinkButton m_gabriel; ///< Instagram links on the two names
+    juce::HyperlinkButton m_adam;
     juce::HyperlinkButton m_link;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DonateModal)

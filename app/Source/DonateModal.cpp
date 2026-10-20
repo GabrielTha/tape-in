@@ -39,11 +39,23 @@ public:
 };
 
 DonateModal::DonateModal()
-    : m_link("github.com/sponsors/GabrielTha", juce::URL(kDonateUrl))
+    : m_gabriel(juce::String(juce::CharPointer_UTF8("Gabriel ThÃ¡ ð§ð·")),
+                juce::URL("https://www.instagram.com/gabrielzuuk")),
+      m_adam(juce::String(juce::CharPointer_UTF8("Adam Kershen ð¨ð¦")),
+             juce::URL("https://www.instagram.com/djadamk")),
+      m_link("github.com/sponsors/GabrielTha", juce::URL(kDonateUrl))
 {
     setInterceptsMouseClicks(true, true);
 
     m_avatar = juce::ImageCache::getFromMemory(BinaryData::gabriel_avatar_png, BinaryData::gabriel_avatar_pngSize);
+
+    for (auto* name : {&m_gabriel, &m_adam}) {
+        name->setFont(juce::FontOptions(15.0f, juce::Font::bold), false, juce::Justification::centred);
+        name->setColour(juce::HyperlinkButton::textColourId, theme::colours::accent);
+        addAndMakeVisible(*name);
+    }
+    m_gabriel.setTooltip("@gabrielzuuk on Instagram");
+    m_adam.setTooltip("@djadamk on Instagram");
 
     m_donate = std::make_unique<AccentButton>("DONATE ANY AMOUNT");
     m_donate->onClick = [] { juce::URL(kDonateUrl).launchInDefaultBrowser(); };
@@ -58,7 +70,7 @@ DonateModal::~DonateModal() = default;
 
 juce::Rectangle<int> DonateModal::cardBounds() const
 {
-    return juce::Rectangle<int>(0, 0, getWidth() - 112, 374).withCentre(getLocalBounds().getCentre());
+    return juce::Rectangle<int>(0, 0, getWidth() - 112, 384).withCentre(getLocalBounds().getCentre());
 }
 
 void DonateModal::mouseDown(const juce::MouseEvent& e)
@@ -73,7 +85,20 @@ void DonateModal::resized()
 {
     auto card = cardBounds();
     auto a = card.reduced(28, 26);
-    a.removeFromTop(64 + 14 + 26 + 10 + 106 + 12); // avatar, title, body (painted)
+    a.removeFromTop(64 + 14 + 26 + 10); // avatar + title (painted)
+    a.removeFromTop(20);                // "made by" line (painted)
+
+    // The two names, centred side by side around a painted dot.
+    const auto names = a.removeFromTop(26);
+    const juce::Font nameFont(juce::FontOptions(15.0f, juce::Font::bold));
+    const int w1 = static_cast<int>(juce::GlyphArrangement::getStringWidth(nameFont, m_gabriel.getButtonText())) + 12;
+    const int w2 = static_cast<int>(juce::GlyphArrangement::getStringWidth(nameFont, m_adam.getButtonText())) + 12;
+    const int sep = 16;
+    int x = names.getCentreX() - (w1 + sep + w2) / 2;
+    m_gabriel.setBounds(x, names.getY(), w1, names.getHeight());
+    m_adam.setBounds(x + w1 + sep, names.getY(), w2, names.getHeight());
+
+    a.removeFromTop(20 + 6 + 40 + 12); // follow + donation lines (painted)
     m_donate->setBounds(a.removeFromTop(54).withSizeKeepingCentre(252, 54));
     a.removeFromTop(6);
     m_link.setBounds(a.removeFromTop(20));
@@ -108,13 +133,19 @@ void DonateModal::paint(juce::Graphics& g)
     a.removeFromTop(10);
     g.setColour(juce::Colour(0xffd9dee4));
     g.setFont(juce::FontOptions(15.0f));
-    const juce::String body = juce::CharPointer_UTF8(
-        "Tape In is free, open-source software\n"
-        "developed by Gabriel Th\xc3\xa1 in Brazil \xf0\x9f\x87\xa7\xf0\x9f\x87\xb7\n"
-        "and Adam Kershen in Canada \xf0\x9f\x87\xa8\xf0\x9f\x87\xa6.\n"
-        "If it is useful to you, a donation of any\n"
-        "amount helps keep it going.");
-    g.drawFittedText(body, a.removeFromTop(106), juce::Justification::centredTop, 5);
+    g.drawText("Tape In is free, open-source software made by", a.removeFromTop(20), juce::Justification::centred);
+
+    // The names row holds the two Instagram links; paint the dot between them.
+    const auto namesRow = a.removeFromTop(26);
+    g.setColour(theme::colours::faint);
+    g.drawText(juce::String(juce::CharPointer_UTF8("\xc2\xb7")), namesRow, juce::Justification::centred);
+
+    g.setColour(juce::Colour(0xffd9dee4));
+    g.drawText("Consider a follow to support the work.", a.removeFromTop(20), juce::Justification::centred);
+    a.removeFromTop(6);
+    g.setColour(juce::Colour(0xffb9c0c8));
+    g.drawFittedText("If it is useful to you, a donation of any\namount helps keep it going.",
+                     a.removeFromTop(40), juce::Justification::centredTop, 2);
 }
 
 } // namespace tapein::app

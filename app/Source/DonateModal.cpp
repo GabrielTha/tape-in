@@ -58,7 +58,7 @@ DonateModal::~DonateModal() = default;
 
 juce::Rectangle<int> DonateModal::cardBounds() const
 {
-    return juce::Rectangle<int>(0, 0, getWidth() - 112, 356).withCentre(getLocalBounds().getCentre());
+    return juce::Rectangle<int>(0, 0, getWidth() - 112, 374).withCentre(getLocalBounds().getCentre());
 }
 
 void DonateModal::mouseDown(const juce::MouseEvent& e)
@@ -73,7 +73,7 @@ void DonateModal::resized()
 {
     auto card = cardBounds();
     auto a = card.reduced(28, 26);
-    a.removeFromTop(64 + 14 + 26 + 10 + 88 + 12); // avatar, title, body (painted)
+    a.removeFromTop(64 + 14 + 26 + 10 + 106 + 12); // avatar, title, body (painted)
     m_donate->setBounds(a.removeFromTop(54).withSizeKeepingCentre(252, 54));
     a.removeFromTop(6);
     m_link.setBounds(a.removeFromTop(20));
@@ -110,10 +110,11 @@ void DonateModal::paint(juce::Graphics& g)
     g.setFont(juce::FontOptions(15.0f));
     const juce::String body = juce::CharPointer_UTF8(
         "Tape In is free, open-source software\n"
-        "developed by Gabriel Th\xc3\xa1 in Brazil.\n"
+        "developed by Gabriel Th\xc3\xa1 in Brazil \xf0\x9f\x87\xa7\xf0\x9f\x87\xb7\n"
+        "and Adam Kershen in Canada \xf0\x9f\x87\xa8\xf0\x9f\x87\xa6.\n"
         "If it is useful to you, a donation of any\n"
         "amount helps keep it going.");
-    g.drawFittedText(body, a.removeFromTop(88), juce::Justification::centredTop, 4);
+    g.drawFittedText(body, a.removeFromTop(106), juce::Justification::centredTop, 5);
 }
 
 } // namespace tapein::app

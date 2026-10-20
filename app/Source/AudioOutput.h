@@ -25,6 +25,13 @@ public:
     [[nodiscard]] juce::StringArray outputDeviceNames() const;
     [[nodiscard]] juce::String currentOutputName() const;
     void selectOutput(const juce::String& name);
+
+    /// Channel names of the current device, in device order.
+    [[nodiscard]] juce::StringArray outputChannelNames() const;
+    /// Device channel indices the mix L/R play on (equal means mono).
+    [[nodiscard]] std::pair<int, int> outputChannelPair() const;
+    /// Routes the mix to a pair of device channels (clamped to the device).
+    void selectOutputChannels(int left, int right);
     [[nodiscard]] double currentSampleRate() const;
     [[nodiscard]] std::unique_ptr<juce::XmlElement> deviceState() const;
 
@@ -46,6 +53,8 @@ private:
     core::dsp::Mixer& m_mixer;
     juce::AudioDeviceManager m_deviceManager;
     std::atomic<double> m_sampleRate{44100.0};
+    std::atomic<int> m_chanL{0}; ///< device channel playing the mix left
+    std::atomic<int> m_chanR{1}; ///< device channel playing the mix right
 };
 
 } // namespace tapein::app

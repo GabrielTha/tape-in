@@ -122,6 +122,8 @@ SourceRow::SourceRow()
     };
     addAndMakeVisible(m_volume);
 
+    addAndMakeVisible(m_meter);
+
     auto setupTag = [this](juce::TextButton& b) {
         b.setClickingTogglesState(true);
         b.setColour(juce::TextButton::buttonColourId, theme::colours::slot);
@@ -162,6 +164,7 @@ SourceRow::SourceRow()
 void SourceRow::applyControlVisibility()
 {
     const bool controls = !m_pending; // empty slots still show the (disabled) transport
+    m_meter.setVisible(controls && !m_empty);
     m_prev->setVisible(controls);
     m_play->setVisible(controls);
     m_next->setVisible(controls);
@@ -194,6 +197,7 @@ void SourceRow::setEmpty()
     m_volume.setEnabled(false);
     m_solo.setEnabled(false);
     m_mute.setEnabled(false);
+    m_meter.setLevels(0.0f, 0.0f);
     applyControlVisibility();
     setAlpha(0.72f);
     repaint();
@@ -236,6 +240,8 @@ void SourceRow::update(const core::session::SourceSnapshot& snap)
                         ? juce::Image()
                         : juce::ImageFileFormat::loadFrom(snap.artwork.data(), snap.artwork.size());
     }
+
+    m_meter.setLevels(snap.peakL, snap.peakR);
 
     if (std::abs(m_volume.getValue() - snap.userGainDb) > 0.05 && !m_volume.isMouseButtonDown())
         m_volume.setValue(snap.userGainDb, juce::dontSendNotification);
@@ -285,8 +291,10 @@ void SourceRow::resized()
     m_title.setBounds(titleRow);
     m_subtitle.setBounds(top.removeFromTop(16));
 
-    // Controls row along the bottom of the mid column.
+    // Controls row along the bottom of the mid column; the strip left between
+    // it and the text block holds the per-source stereo meter.
     auto ctrls = r.removeFromBottom(34);
+    m_meter.setBounds(r.reduced(0, 4));
 
     // Allow / Decline share the full controls row (shown only when pending).
     {

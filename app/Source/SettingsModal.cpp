@@ -112,6 +112,14 @@ SettingsModal::SettingsModal()
                            [safe](int r) {
                                if (safe == nullptr || r <= 0)
                                    return;
+                               if (safe->m_audioDevices[r - 1] != safe->m_audio->text()) {
+                                   // A different device: its channel map is its
+                                   // own, so fall back to the default 1/2 pair.
+                                   safe->m_channelNames.clear();
+                                   safe->m_outLeft = 0;
+                                   safe->m_outRight = 1;
+                                   safe->refreshChannelTexts();
+                               }
                                safe->m_audio->setText(safe->m_audioDevices[r - 1]);
                            });
     };
@@ -135,16 +143,15 @@ SettingsModal::SettingsModal()
     }
 
     m_out1 = std::make_unique<Dropdown>();
-    m_out1->setText("Output 1");
-    m_out1->inert = true;
-    m_out1->setTooltip("Channel routing is coming in a later version");
+    m_out1->setTooltip("Device channel the mix left plays on");
+    m_out1->onClick = [this] { showChannelMenu(true); };
     addAndMakeVisible(*m_out1);
 
     m_out2 = std::make_unique<Dropdown>();
-    m_out2->setText("Output 2");
-    m_out2->inert = true;
-    m_out2->setTooltip("Channel routing is coming in a later version");
+    m_out2->setTooltip("Device channel the mix right plays on");
+    m_out2->onClick = [this] { showChannelMenu(false); };
     addAndMakeVisible(*m_out2);
+    refreshChannelTexts();
 
     m_save.setColour(juce::TextButton::buttonColourId, theme::colours::accent);
     m_save.setColour(juce::TextButton::textColourOffId, theme::colours::background);
@@ -159,6 +166,37 @@ SettingsModal::SettingsModal()
 
 SettingsModal::~SettingsModal() = default;
 
+void SettingsModal::refreshChannelTexts()
+{
+    const auto nameFor = [this](int chan) {
+        return chan >= 0 && chan < m_channelNames.size() ? m_channelNames[chan]
+                                                         : "Output " + juce::String(chan + 1);
+    };
+    m_out1->setText(nameFor(m_outLeft));
+    m_out2->setText(nameFor(m_outRight));
+    m_out1->inert = m_channelNames.isEmpty();
+    m_out2->inert = m_channelNames.isEmpty();
+}
+
+void SettingsModal::showChannelMenu(bool left)
+{
+    if (m_channelNames.isEmpty())
+        return;
+    const int current = left ? m_outLeft : m_outRight;
+    juce::PopupMenu menu;
+    for (int i = 0; i < m_channelNames.size(); ++i)
+        menu.addItem(i + 1, m_channelNames[i], true, i == current);
+    auto* target = left ? m_out1.get() : m_out2.get();
+    juce::Component::SafePointer<SettingsModal> safe(this);
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target).withStandardItemHeight(32),
+                       [safe, left](int r) {
+                           if (safe == nullptr || r <= 0)
+                               return;
+                           (left ? safe->m_outLeft : safe->m_outRight) = r - 1;
+                           safe->refreshChannelTexts();
+                       });
+}
+
 void SettingsModal::setValues(const Values& v)
 {
     m_name.setText(v.name, juce::dontSendNotification);
@@ -171,10 +209,19 @@ void SettingsModal::setValues(const Values& v)
     m_audio->setText(v.audioDevice);
     m_bufferIndex = juce::jlimit(0, 2, v.bufferIndex);
     m_buffer[static_cast<size_t>(m_bufferIndex)].setToggleState(true, juce::dontSendNotification);
+    m_outLeft = v.outLeft;
+    m_outRight = v.outRight;
+    refreshChannelTexts();
     relayout();
 }
 
 void SettingsModal::setAudioDevices(const juce::StringArray& names) { m_audioDevices = names; }
+
+void SettingsModal::setOutputChannelNames(const juce::StringArray& names)
+{
+    m_channelNames = names;
+    refreshChannelTexts();
+}
 
 SettingsModal::Values SettingsModal::gather() const
 {
@@ -187,6 +234,8 @@ SettingsModal::Values SettingsModal::gather() const
     v.samplesFolder = m_folderPath;
     v.audioDevice = m_audio->text();
     v.bufferIndex = m_bufferIndex;
+    v.outLeft = m_outLeft;
+    v.outRight = m_outRight;
     return v;
 }
 

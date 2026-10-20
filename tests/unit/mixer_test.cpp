@@ -185,3 +185,28 @@ TEST_CASE("add beyond maxSources returns nullopt")
     REQUIRE(m.add(toneSource(0.1f)).has_value());
     CHECK_FALSE(m.add(toneSource(0.1f)).has_value());
 }
+
+TEST_CASE("master peaks accumulate until consumed")
+{
+    Mixer m(4, 256);
+    const auto slot = m.add(toneSource(0.5f));
+    REQUIRE(slot.has_value());
+    settle(m);
+    Out loud(2, 512);
+    m.render(loud.ptrs.data(), 2, 512, 44100.0);
+
+    // A silent render after the source is gone must not erase the held peak.
+    m.remove(*slot);
+    Out quiet(2, 512);
+    m.render(quiet.ptrs.data(), 2, 512, 44100.0);
+
+    const auto [l, r] = m.consumePeaks();
+    CHECK(l > 0.4f);
+    CHECK(r > 0.4f);
+
+    // Consuming resets; only silence has rendered since.
+    m.render(quiet.ptrs.data(), 2, 512, 44100.0);
+    const auto [l2, r2] = m.consumePeaks();
+    CHECK(l2 < 0.01f);
+    CHECK(r2 < 0.01f);
+}

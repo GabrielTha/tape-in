@@ -140,8 +140,15 @@ void Mixer::renderChunk(float* const* outputs, uint32_t numOutputs, uint32_t fra
         peakL = std::max(peakL, std::abs(m_left[i]));
         peakR = std::max(peakR, std::abs(m_right[i]));
     }
-    m_meters.peakL.store(peakL, std::memory_order_relaxed);
-    m_meters.peakR.store(peakR, std::memory_order_relaxed);
+    // Accumulate (atomic max) so consumePeaks() sees the loudest moment
+    // between UI reads; the UI resets by exchanging to zero.
+    const auto accumulate = [](std::atomic<float>& held, float v) noexcept {
+        float cur = held.load(std::memory_order_relaxed);
+        while (v > cur && !held.compare_exchange_weak(cur, v, std::memory_order_relaxed)) {
+        }
+    };
+    accumulate(m_meters.peakL, peakL);
+    accumulate(m_meters.peakR, peakR);
 
     if (numOutputs == 0) {
         return;

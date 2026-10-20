@@ -12,7 +12,7 @@ namespace tapein::app {
 
 /// The settings modal from the Config artboard: a scrim over the window and a
 /// neumorphic card with the destination name, "Restrict access" + password,
-/// "Exclusive solo", the audio-device picker, and the (inert) Output 1/2
+/// "Exclusive solo", the audio-device picker, and the Output 1/2 channel
 /// routing. Save applies; the scrim or Close cancels.
 class SettingsModal final : public juce::Component {
 public:
@@ -25,6 +25,8 @@ public:
         juce::String samplesFolder;
         juce::String audioDevice;
         int bufferIndex = 0; ///< 0 Sync, 1 Short, 2 Monitor
+        int outLeft = 0;  ///< device channel playing the mix left
+        int outRight = 1; ///< device channel playing the mix right
     };
 
     SettingsModal();
@@ -32,6 +34,8 @@ public:
 
     void setValues(const Values& v);
     void setAudioDevices(const juce::StringArray& names);
+    /// Channel names of the device the Output 1/2 pickers choose from.
+    void setOutputChannelNames(const juce::StringArray& names);
 
     std::function<void(const Values&)> onApply;
     std::function<void()> onClose;
@@ -47,6 +51,8 @@ private:
     [[nodiscard]] juce::Rectangle<int> cardBounds() const;
     [[nodiscard]] Values gather() const;
     void relayout();
+    void showChannelMenu(bool left); ///< popup for one Output picker
+    void refreshChannelTexts();
 
     juce::TextEditor m_name;
     std::unique_ptr<CheckBox> m_restrict;
@@ -62,9 +68,12 @@ private:
     int m_bufferIndex = 0;
     std::unique_ptr<Dropdown> m_out1;
     std::unique_ptr<Dropdown> m_out2;
+    int m_outLeft = 0;
+    int m_outRight = 1;
     juce::TextButton m_save{"Save"};
 
     juce::StringArray m_audioDevices;
+    juce::StringArray m_channelNames;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SettingsModal)
 };

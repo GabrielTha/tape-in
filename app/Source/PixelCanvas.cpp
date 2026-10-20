@@ -59,6 +59,24 @@ void PixelCanvas::pointerAt(juce::Point<float> pos)
     }
 }
 
+void PixelCanvas::energize(float level)
+{
+    if (m_cells.empty() || level < 0.02f) {
+        return;
+    }
+    // Perceptual-ish scaling: quiet audio sparkles a little, loud a lot.
+    const int count = 1 + static_cast<int>(level * level * 28.0f);
+    for (int i = 0; i < count; ++i) {
+        const int col = m_random.nextInt(m_cols);
+        const int row = m_random.nextInt(m_rows);
+        auto& cell = m_cells[static_cast<size_t>(row) * static_cast<size_t>(m_cols) + static_cast<size_t>(col)];
+        cell = juce::jmax(cell, level * (0.35f + 0.65f * m_random.nextFloat()));
+    }
+    if (!isTimerRunning()) {
+        startTimerHz(30);
+    }
+}
+
 void PixelCanvas::timerCallback()
 {
     bool anyAlive = false;

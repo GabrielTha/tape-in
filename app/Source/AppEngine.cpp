@@ -58,6 +58,11 @@ bool AppEngine::start()
         }
     };
     m_audio->start(state.get());
+    const int outL = m_settings.outputChannelLeft();
+    const int outR = m_settings.outputChannelRight();
+    if (outL != 0 || outR != 1) {
+        m_audio->selectOutputChannels(outL, outR);
+    }
     m_lastError.clear();
     m_started = true;
     return true;

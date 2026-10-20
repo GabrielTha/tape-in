@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "LevelMeter.h"
+
 #include "tapein/core/session/dacp_client.h"
 #include "tapein/core/session/engine.h"
 
@@ -59,6 +61,7 @@ private:
     std::unique_ptr<IconButton> m_play;
     std::unique_ptr<IconButton> m_next;
     juce::Slider m_volume;
+    LevelMeter m_meter;
     juce::TextButton m_solo{"S"};
     juce::TextButton m_mute{"M"};
     juce::TextButton m_allow{"Allow"};

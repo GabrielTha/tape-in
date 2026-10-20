@@ -134,7 +134,11 @@ MainComponent::MainComponent(AppEngine& app, Settings& settings) : m_app(app), m
     addAndMakeVisible(m_pixels);
     addMouseListener(this, true); // child moves reach mouseMove() below
 
-    m_device.onSelect = [this](const juce::String& name) { m_app.audio().selectOutput(name); };
+    m_device.onSelect = [this](const juce::String& name) {
+        m_app.audio().selectOutput(name); // resets the routed pair to 1/2
+        const auto [outL, outR] = m_app.audio().outputChannelPair();
+        m_settings.setOutputChannels(outL, outR);
+    };
     addAndMakeVisible(m_device);
 
     m_gear = std::make_unique<GearButton>();
@@ -163,6 +167,9 @@ MainComponent::MainComponent(AppEngine& app, Settings& settings) : m_app(app), m
     m_viewport.setViewedComponent(&m_rowHost, false);
     m_viewport.setScrollBarsShown(true, false);
     addAndMakeVisible(m_viewport);
+
+    // Master output meter above the global sampling bar.
+    addAndMakeVisible(m_master);
 
     // Global sampling bar (above the footer).
     m_record.onToggle = [this](bool start) { toggleRecording(start); };
@@ -219,7 +226,9 @@ void MainComponent::openSettings(bool open)
         v.samplesFolder = m_settings.samplesFolder().getFullPathName();
         v.audioDevice = m_app.audio().currentOutputName();
         v.bufferIndex = m_bufferIndex;
+        std::tie(v.outLeft, v.outRight) = m_app.audio().outputChannelPair();
         m_modal.setAudioDevices(m_app.audio().outputDeviceNames());
+        m_modal.setOutputChannelNames(m_app.audio().outputChannelNames());
         m_modal.setValues(v);
     }
     m_modal.setVisible(open);
@@ -251,6 +260,12 @@ void MainComponent::applySettings(const SettingsModal::Values& v)
     if (v.audioDevice.isNotEmpty() && v.audioDevice != m_app.audio().currentOutputName()) {
         m_app.audio().selectOutput(v.audioDevice);
     }
+    if (std::pair(v.outLeft, v.outRight) != m_app.audio().outputChannelPair()) {
+        m_app.audio().selectOutputChannels(v.outLeft, v.outRight);
+    }
+    // Persist what actually applied (the pair is clamped to the device).
+    const auto [outL, outR] = m_app.audio().outputChannelPair();
+    m_settings.setOutputChannels(outL, outR);
 
     selectBuffer(juce::jlimit(0, 2, v.bufferIndex));
 }
@@ -313,6 +328,11 @@ void MainComponent::timerCallback()
     m_record.setRecording(rec.recording, static_cast<int>(rec.frames / 44100));
     m_record.setWaveform(m_app.engine()->inputWaveform());
 
+    // Master output level: the meter strip plus the pixel-canvas shimmer.
+    const auto [peakL, peakR] = m_app.engine()->mixer().consumePeaks();
+    m_master.setLevels(peakL, peakR);
+    m_pixels.energize(juce::jmax(peakL, peakR));
+
     if (m_liveCount == 0) {
         // CharPointer_UTF8 so the literal's UTF-8 bytes decode to the glyph
         // (an implicit const char* was rendering the ellipsis as mojibake).
@@ -373,8 +393,10 @@ void MainComponent::resized()
     m_donateBtn->setBounds(footer.removeFromRight(104).withSizeKeepingCentre(104, 30));
     m_status.setBounds(footer.withTrimmedRight(10));
 
-    // Global record bar, directly above the footer (full width, horizontal).
+    // Global record bar, directly above the footer (full width, horizontal),
+    // with the master output meter strip right above it.
     m_record.setBounds(r.removeFromBottom(68));
+    m_master.setBounds(r.removeFromBottom(14).reduced(18, 2));
 
     // Source list. Trim the top so the header-to-first-slot gap matches the
     // inter-slot gap: slots are kRowHeight apart with a (kRowHeight - rowH) +

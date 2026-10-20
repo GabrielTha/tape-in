@@ -55,6 +55,11 @@ public:
     [[nodiscard]] std::unique_ptr<juce::XmlElement> audioDeviceState() const;
     void setAudioDeviceState(const juce::XmlElement& state);
 
+    /// Device channel indices the mix L/R play on (Output routing).
+    [[nodiscard]] int outputChannelLeft() const;
+    [[nodiscard]] int outputChannelRight() const;
+    void setOutputChannels(int left, int right);
+
     [[nodiscard]] juce::Rectangle<int> windowBounds() const;
     void setWindowBounds(juce::Rectangle<int> bounds);
 

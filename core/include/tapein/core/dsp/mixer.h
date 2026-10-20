@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace tapein::core::dsp {
@@ -44,6 +45,15 @@ public:
     /// single channel gets the average), soft-clips, updates the meters.
     void render(float* const* outputs, uint32_t numOutputs, uint32_t frames, double sampleRate) noexcept;
     [[nodiscard]] const MasterMeters& meters() const noexcept { return m_meters; }
+
+    // any thread
+    /// Returns the {L, R} peak accumulated since the last call and resets it,
+    /// so a slow UI poll still sees the loudest moment between reads.
+    [[nodiscard]] std::pair<float, float> consumePeaks() noexcept
+    {
+        return {m_meters.peakL.exchange(0.0f, std::memory_order_relaxed),
+                m_meters.peakR.exchange(0.0f, std::memory_order_relaxed)};
+    }
 
 private:
     struct Retired {

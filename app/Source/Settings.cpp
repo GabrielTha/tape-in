@@ -156,6 +156,23 @@ void Settings::setStartAtLogin(bool enabled)
     file().saveIfNeeded();
 }
 
+int Settings::outputChannelLeft() const
+{
+    return file().getIntValue("outputChannelLeft", 0);
+}
+
+int Settings::outputChannelRight() const
+{
+    return file().getIntValue("outputChannelRight", 1);
+}
+
+void Settings::setOutputChannels(int left, int right)
+{
+    file().setValue("outputChannelLeft", left);
+    file().setValue("outputChannelRight", right);
+    file().saveIfNeeded();
+}
+
 std::unique_ptr<juce::XmlElement> Settings::audioDeviceState() const
 {
     return file().getXmlValue("audioDeviceState");

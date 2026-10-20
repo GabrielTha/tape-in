@@ -20,6 +20,10 @@ public:
     /// Light the cells around a pointer position, in this component's coords.
     void pointerAt(juce::Point<float> pos);
 
+    /// Scatter sparkles across the grid from the master output level (linear
+    /// 0..1 peak): louder means more and brighter cells. Call per UI tick.
+    void energize(float level);
+
     void resized() override;
     void paint(juce::Graphics& g) override;
 
@@ -29,6 +33,7 @@ private:
     int m_cols = 0;
     int m_rows = 0;
     std::vector<float> m_cells; ///< per-cell intensity, 0..1
+    juce::Random m_random;      ///< sparkle placement; message thread only
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PixelCanvas)
 };

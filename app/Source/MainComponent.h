@@ -5,6 +5,7 @@
 
 #include "AppEngine.h"
 #include "DeviceButton.h"
+#include "RecordBar.h"
 #include "Settings.h"
 #include "SettingsModal.h"
 #include "SourceRow.h"
@@ -13,6 +14,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -39,6 +41,7 @@ private:
     void openSettings(bool open);
     void applySettings(const SettingsModal::Values& v);
     void selectBuffer(int index);
+    void toggleRecording(bool start);
 
     AppEngine& m_app;
     Settings& m_settings;
@@ -59,6 +62,10 @@ private:
     juce::Viewport m_viewport;
     juce::Component m_rowHost;
     std::vector<std::unique_ptr<SourceRow>> m_rows;
+
+    // Global sampling bar (above the footer).
+    RecordBar m_record;
+    juce::File m_lastSample; ///< the most recent sample written, for drag-out
 
     // Buffer-mode footer
     std::array<juce::TextButton, 3> m_buffer{juce::TextButton{"Sync"}, juce::TextButton{"Short"},

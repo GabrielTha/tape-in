@@ -272,7 +272,7 @@ void SourceRow::resized()
 
     auto sm = r.removeFromRight(30);
     m_solo.setBounds(sm.removeFromTop(26));
-    sm.removeFromTop(8);
+    sm.removeFromTop(4);
     m_mute.setBounds(sm.removeFromTop(26));
     r.removeFromRight(13);
 

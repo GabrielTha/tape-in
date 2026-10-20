@@ -85,6 +85,21 @@ SettingsModal::SettingsModal()
     m_ask = std::make_unique<CheckBox>();
     addAndMakeVisible(*m_ask);
 
+    m_folder = std::make_unique<Dropdown>();
+    m_folder->onClick = [this] {
+        m_chooser = std::make_unique<juce::FileChooser>(
+            "Choose a folder for samples", m_folderPath.isNotEmpty() ? juce::File(m_folderPath) : juce::File());
+        m_chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
+                               [this](const juce::FileChooser& fc) {
+                                   const juce::File r = fc.getResult();
+                                   if (r != juce::File()) {
+                                       m_folderPath = r.getFullPathName();
+                                       m_folder->setText(r.getFileName());
+                                   }
+                               });
+    };
+    addAndMakeVisible(*m_folder);
+
     m_audio = std::make_unique<Dropdown>();
     m_audio->onClick = [this] {
         if (m_audioDevices.isEmpty())
@@ -134,6 +149,8 @@ void SettingsModal::setValues(const Values& v)
     m_password.setText(v.password, juce::dontSendNotification);
     m_exclusive->setToggleState(v.exclusiveSolo, juce::dontSendNotification);
     m_ask->setToggleState(v.askBeforeAccept, juce::dontSendNotification);
+    m_folderPath = v.samplesFolder;
+    m_folder->setText(juce::File(v.samplesFolder).getFileName());
     m_audio->setText(v.audioDevice);
     relayout();
 }
@@ -148,6 +165,7 @@ SettingsModal::Values SettingsModal::gather() const
     v.password = m_password.getText();
     v.exclusiveSolo = m_exclusive->getToggleState();
     v.askBeforeAccept = m_ask->getToggleState();
+    v.samplesFolder = m_folderPath;
     v.audioDevice = m_audio->text();
     return v;
 }
@@ -155,7 +173,7 @@ SettingsModal::Values SettingsModal::gather() const
 juce::Rectangle<int> SettingsModal::cardBounds() const
 {
     const bool pw = m_restrict->getToggleState();
-    const int h = pw ? 546 : 490;
+    const int h = pw ? 602 : 546;
     return juce::Rectangle<int>(28, 56, getWidth() - 56, h);
 }
 
@@ -195,6 +213,7 @@ void SettingsModal::resized()
     m_exclusive->setBounds(row(40).removeFromLeft(28).withSizeKeepingCentre(28, 28));
     m_ask->setBounds(row(40).removeFromLeft(28).withSizeKeepingCentre(28, 28));
     m_audio->setBounds(row(40));
+    m_folder->setBounds(row(40));
     auto outputs = row(40);
     const int half = (outputs.getWidth() - 12) / 2;
     m_out1->setBounds(outputs.removeFromLeft(half));
@@ -231,6 +250,7 @@ void SettingsModal::paint(juce::Graphics& g)
     labelFor(*m_exclusive, "Exclusive solo");
     labelFor(*m_ask, "Ask to connect");
     labelFor(*m_audio, "Audio device");
+    labelFor(*m_folder, "Samples folder");
     labelFor(*m_out1, "Output");
 }
 

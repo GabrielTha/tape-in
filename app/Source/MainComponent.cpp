@@ -3,9 +3,60 @@
 
 #include "MainComponent.h"
 
+#include <juce_audio_formats/juce_audio_formats.h>
+
 namespace tapein::app {
 
 namespace {
+
+// Writes a recorded sample to a 16-bit WAV in `folder`, named from the
+// now-playing metadata plus a timestamp. Returns the file, or an invalid
+// File on failure / empty capture.
+juce::File writeSampleToWav(const core::session::RecordedSample& s, const juce::File& folder)
+{
+    if (s.interleaved.empty() || s.channels == 0) {
+        return {};
+    }
+    folder.createDirectory();
+
+    juce::String base = juce::String(s.artist).trim();
+    const juce::String track = juce::String(s.trackName).trim();
+    if (base.isNotEmpty() && track.isNotEmpty()) {
+        base += " - ";
+    }
+    base += track;
+    if (base.isEmpty()) {
+        base = "Sample";
+    }
+    base = juce::File::createLegalFileName(base);
+    const juce::String stamp = juce::Time::getCurrentTime().formatted("%Y-%m-%d %H.%M.%S");
+    const juce::File out = folder.getNonexistentChildFile(base + " " + stamp, ".wav");
+
+    auto stream = out.createOutputStream();
+    if (stream == nullptr) {
+        return {};
+    }
+    juce::WavAudioFormat fmt;
+    std::unique_ptr<juce::AudioFormatWriter> writer(
+        fmt.createWriterFor(stream.get(), static_cast<double>(s.sampleRate), s.channels, 16, {}, 0));
+    if (writer == nullptr) {
+        return {};
+    }
+    stream.release(); // the writer owns the stream now
+
+    const int numFrames = static_cast<int>(s.interleaved.size() / s.channels);
+    juce::AudioBuffer<float> buf(static_cast<int>(s.channels), numFrames);
+    for (int ch = 0; ch < static_cast<int>(s.channels); ++ch) {
+        float* d = buf.getWritePointer(ch);
+        for (int i = 0; i < numFrames; ++i) {
+            d[i] = static_cast<float>(s.interleaved[static_cast<size_t>(i) * s.channels + static_cast<size_t>(ch)]) / 32768.0f;
+        }
+    }
+    writer->writeFromAudioSampleBuffer(buf, 0, numFrames);
+    writer.reset(); // flush + close
+    return out;
+}
+
 core::session::BufferMode modeForIndex(int i)
 {
     switch (i) {
@@ -88,6 +139,10 @@ MainComponent::MainComponent(AppEngine& app, Settings& settings) : m_app(app), m
     m_viewport.setScrollBarsShown(true, false);
     addAndMakeVisible(m_viewport);
 
+    // Global sampling bar (above the footer).
+    m_record.onToggle = [this](bool start) { toggleRecording(start); };
+    addAndMakeVisible(m_record);
+
     // Buffer-mode footer (a segmented control painted over an inset trough).
     for (int i = 0; i < 3; ++i) {
         auto& b = m_buffer[static_cast<size_t>(i)];
@@ -109,7 +164,7 @@ MainComponent::MainComponent(AppEngine& app, Settings& settings) : m_app(app), m
     addAndMakeVisible(m_status);
 
     refreshOutputs();
-    setSize(500, 726); // after every child exists: setSize drives resized()
+    setSize(500, 792); // after every child exists: setSize drives resized()
     startTimerHz(30);
 }
 
@@ -137,6 +192,7 @@ void MainComponent::openSettings(bool open)
         v.password = m_settings.password();
         v.exclusiveSolo = m_settings.exclusiveSolo();
         v.askBeforeAccept = m_settings.askBeforeAccept();
+        v.samplesFolder = m_settings.samplesFolder().getFullPathName();
         v.audioDevice = m_app.audio().currentOutputName();
         m_modal.setAudioDevices(m_app.audio().outputDeviceNames());
         m_modal.setValues(v);
@@ -163,8 +219,26 @@ void MainComponent::applySettings(const SettingsModal::Values& v)
     m_app.engine()->setAskBeforeAccept(v.askBeforeAccept);
     m_settings.setAskBeforeAccept(v.askBeforeAccept);
 
+    if (v.samplesFolder.isNotEmpty()) {
+        m_settings.setSamplesFolder(juce::File(v.samplesFolder));
+    }
+
     if (v.audioDevice.isNotEmpty() && v.audioDevice != m_app.audio().currentOutputName()) {
         m_app.audio().selectOutput(v.audioDevice);
+    }
+}
+
+void MainComponent::toggleRecording(bool start)
+{
+    if (start) {
+        m_app.engine()->startRecording();
+        return;
+    }
+    const auto sample = m_app.engine()->stopRecording();
+    const juce::File file = writeSampleToWav(sample, m_settings.samplesFolder());
+    if (file.existsAsFile()) {
+        m_lastSample = file;
+        m_record.setSample(file);
     }
 }
 
@@ -208,11 +282,19 @@ void MainComponent::timerCallback()
     (void)m_app.engine()->pollEvents();
     rebuildRows(m_app.engine()->sources());
 
+    const auto rec = m_app.engine()->recordStatus();
+    m_record.setRecording(rec.recording, static_cast<int>(rec.frames / 44100));
+    m_record.setWaveform(m_app.engine()->inputWaveform());
+
     if (m_liveCount == 0) {
-        m_status.setText("waiting for a device\xe2\x80\xa6", juce::dontSendNotification);
+        // CharPointer_UTF8 so the literal's UTF-8 bytes decode to the glyph
+        // (an implicit const char* was rendering the ellipsis as mojibake).
+        m_status.setText(juce::String(juce::CharPointer_UTF8("Waiting for a device\xe2\x80\xa6")),
+                         juce::dontSendNotification);
     } else {
-        m_status.setText(juce::String(m_liveCount) + (m_liveCount == 1 ? " source \xc2\xb7 " : " sources \xc2\xb7 ")
-                             + latencyFor(m_bufferIndex) + " s latency",
+        const juce::String sep = juce::CharPointer_UTF8(" \xc2\xb7 ");
+        const juce::String unit = m_liveCount == 1 ? " source" : " sources";
+        m_status.setText(juce::String(m_liveCount) + unit + sep + latencyFor(m_bufferIndex) + " s latency",
                          juce::dontSendNotification);
     }
 
@@ -253,6 +335,9 @@ void MainComponent::resized()
         m_buffer[static_cast<size_t>(i)].setBounds(seg.removeFromLeft(i == 2 ? seg.getWidth() : sw).reduced(1));
     }
     m_status.setBounds(footer.withTrimmedLeft(10));
+
+    // Global record bar, directly above the footer (full width, horizontal).
+    m_record.setBounds(r.removeFromBottom(68));
 
     // Source list. Trim the top so the header-to-first-slot gap matches the
     // inter-slot gap: slots are kRowHeight apart with a (kRowHeight - rowH) +

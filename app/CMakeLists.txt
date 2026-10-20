@@ -29,6 +29,7 @@ target_sources(TapeIn PRIVATE
     Source/Theme.cpp
     Source/LevelMeter.cpp
     Source/SourceRow.cpp
+    Source/RecordBar.cpp
     Source/DeviceButton.cpp
     Source/SettingsModal.cpp
     Source/MainComponent.cpp

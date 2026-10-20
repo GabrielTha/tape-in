@@ -44,6 +44,11 @@ public:
     [[nodiscard]] bool askBeforeAccept() const;
     void setAskBeforeAccept(bool ask);
 
+    /// Where recorded samples are written. Defaults to ~/Music/Tape In Samples
+    /// (created on demand).
+    [[nodiscard]] juce::File samplesFolder() const;
+    void setSamplesFolder(const juce::File& folder);
+
     [[nodiscard]] bool startAtLogin() const;
     void setStartAtLogin(bool enabled);
 

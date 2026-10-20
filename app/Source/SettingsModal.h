@@ -21,6 +21,7 @@ public:
         juce::String password;
         bool exclusiveSolo = false;
         bool askBeforeAccept = false;
+        juce::String samplesFolder;
         juce::String audioDevice;
     };
 
@@ -50,6 +51,9 @@ private:
     juce::TextEditor m_password;
     std::unique_ptr<CheckBox> m_exclusive;
     std::unique_ptr<CheckBox> m_ask;
+    std::unique_ptr<Dropdown> m_folder;
+    std::unique_ptr<juce::FileChooser> m_chooser;
+    juce::String m_folderPath;
     std::unique_ptr<Dropdown> m_audio;
     std::unique_ptr<Dropdown> m_out1;
     std::unique_ptr<Dropdown> m_out2;

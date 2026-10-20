@@ -128,6 +128,23 @@ void Settings::setAskBeforeAccept(bool ask)
     file().saveIfNeeded();
 }
 
+juce::File Settings::samplesFolder() const
+{
+    const juce::String stored = file().getValue("samplesFolder");
+    juce::File folder = stored.isNotEmpty()
+                            ? juce::File(stored)
+                            : juce::File::getSpecialLocation(juce::File::userMusicDirectory).getChildFile("Tape In Samples");
+    if (!folder.isDirectory())
+        folder.createDirectory();
+    return folder;
+}
+
+void Settings::setSamplesFolder(const juce::File& folder)
+{
+    file().setValue("samplesFolder", folder.getFullPathName());
+    file().saveIfNeeded();
+}
+
 bool Settings::startAtLogin() const
 {
     return file().getBoolValue("startAtLogin", false);

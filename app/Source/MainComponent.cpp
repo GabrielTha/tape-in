@@ -219,8 +219,6 @@ void MainComponent::openSettings(bool open)
     if (open) {
         SettingsModal::Values v;
         v.name = m_app.engine()->name();
-        v.requirePassword = m_settings.requirePassword();
-        v.password = m_settings.password();
         v.exclusiveSolo = m_settings.exclusiveSolo();
         v.askBeforeAccept = m_settings.askBeforeAccept();
         v.samplesFolder = m_settings.samplesFolder().getFullPathName();
@@ -242,10 +240,6 @@ void MainComponent::applySettings(const SettingsModal::Values& v)
     m_app.engine()->setName(v.name.toStdString());
     const juce::String applied = m_app.engine()->name();
     m_settings.setReceiverName(applied);
-
-    m_app.engine()->setRequirePassword(v.requirePassword, v.password.toStdString());
-    m_settings.setRequirePassword(v.requirePassword);
-    m_settings.setPassword(v.password);
 
     m_app.engine()->setExclusiveSolo(v.exclusiveSolo);
     m_settings.setExclusiveSolo(v.exclusiveSolo);

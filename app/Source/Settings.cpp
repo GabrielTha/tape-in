@@ -16,6 +16,11 @@ Settings::Settings()
     options.osxLibrarySubFolder = "Application Support";
     options.storageFormat = juce::PropertiesFile::storeAsXML;
     m_properties.setStorageParameters(options);
+    // The "Restrict access" password feature is gone; scrub what it stored
+    // (the password was kept in plaintext).
+    file().removeValue("requirePassword");
+    file().removeValue("password");
+    file().saveIfNeeded();
 }
 
 juce::String Settings::receiverName() const
@@ -81,28 +86,6 @@ bool Settings::ignoreSenderVolume() const
 void Settings::setIgnoreSenderVolume(bool ignore)
 {
     file().setValue("ignoreSenderVolume", ignore);
-    file().saveIfNeeded();
-}
-
-bool Settings::requirePassword() const
-{
-    return file().getBoolValue("requirePassword", false);
-}
-
-void Settings::setRequirePassword(bool require)
-{
-    file().setValue("requirePassword", require);
-    file().saveIfNeeded();
-}
-
-juce::String Settings::password() const
-{
-    return file().getValue("password", "");
-}
-
-void Settings::setPassword(const juce::String& password)
-{
-    file().setValue("password", password);
     file().saveIfNeeded();
 }
 

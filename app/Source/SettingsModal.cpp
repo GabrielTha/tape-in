@@ -70,15 +70,6 @@ SettingsModal::SettingsModal()
     styleField(m_name);
     addAndMakeVisible(m_name);
 
-    m_restrict = std::make_unique<CheckBox>();
-    m_restrict->onClick = [this] { relayout(); };
-    addAndMakeVisible(*m_restrict);
-
-    styleField(m_password);
-    m_password.setPasswordCharacter(static_cast<juce::juce_wchar>(0x2022));
-    m_password.setTextToShowWhenEmpty("Password", theme::colours::faint);
-    addChildComponent(m_password);
-
     m_exclusive = std::make_unique<CheckBox>();
     addAndMakeVisible(*m_exclusive);
 
@@ -200,8 +191,6 @@ void SettingsModal::showChannelMenu(bool left)
 void SettingsModal::setValues(const Values& v)
 {
     m_name.setText(v.name, juce::dontSendNotification);
-    m_restrict->setToggleState(v.requirePassword, juce::dontSendNotification);
-    m_password.setText(v.password, juce::dontSendNotification);
     m_exclusive->setToggleState(v.exclusiveSolo, juce::dontSendNotification);
     m_ask->setToggleState(v.askBeforeAccept, juce::dontSendNotification);
     m_folderPath = v.samplesFolder;
@@ -212,7 +201,8 @@ void SettingsModal::setValues(const Values& v)
     m_outLeft = v.outLeft;
     m_outRight = v.outRight;
     refreshChannelTexts();
-    relayout();
+    resized();
+    repaint();
 }
 
 void SettingsModal::setAudioDevices(const juce::StringArray& names) { m_audioDevices = names; }
@@ -227,8 +217,6 @@ SettingsModal::Values SettingsModal::gather() const
 {
     Values v;
     v.name = m_name.getText().trim();
-    v.requirePassword = m_restrict->getToggleState();
-    v.password = m_password.getText();
     v.exclusiveSolo = m_exclusive->getToggleState();
     v.askBeforeAccept = m_ask->getToggleState();
     v.samplesFolder = m_folderPath;
@@ -241,9 +229,7 @@ SettingsModal::Values SettingsModal::gather() const
 
 juce::Rectangle<int> SettingsModal::cardBounds() const
 {
-    const bool pw = m_restrict->getToggleState();
-    const int h = pw ? 658 : 602;
-    return juce::Rectangle<int>(28, 56, getWidth() - 56, h);
+    return juce::Rectangle<int>(28, 56, getWidth() - 56, 546);
 }
 
 void SettingsModal::mouseDown(const juce::MouseEvent& e)
@@ -251,13 +237,6 @@ void SettingsModal::mouseDown(const juce::MouseEvent& e)
     // A click on the scrim (outside the card) cancels.
     if (!cardBounds().contains(e.getPosition()) && onClose)
         onClose();
-}
-
-void SettingsModal::relayout()
-{
-    m_password.setVisible(m_restrict->getToggleState());
-    resized();
-    repaint();
 }
 
 void SettingsModal::resized()
@@ -276,9 +255,6 @@ void SettingsModal::resized()
     };
 
     m_name.setBounds(row(40));
-    m_restrict->setBounds(row(40).removeFromLeft(28).withSizeKeepingCentre(28, 28));
-    if (m_restrict->getToggleState())
-        m_password.setBounds(row(40));
     m_exclusive->setBounds(row(40).removeFromLeft(28).withSizeKeepingCentre(28, 28));
     m_ask->setBounds(row(40).removeFromLeft(28).withSizeKeepingCentre(28, 28));
     m_audio->setBounds(row(40));
@@ -318,9 +294,6 @@ void SettingsModal::paint(juce::Graphics& g)
                    juce::Justification::centredLeft);
     };
     labelFor(m_name, "Network name");
-    labelFor(*m_restrict, "Restrict access");
-    if (m_password.isVisible())
-        labelFor(m_password, "Password");
     labelFor(*m_exclusive, "Exclusive solo");
     labelFor(*m_ask, "Ask to connect");
     labelFor(*m_audio, "Audio device");

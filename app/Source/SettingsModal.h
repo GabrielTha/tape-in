@@ -11,15 +11,13 @@
 namespace tapein::app {
 
 /// The settings modal from the Config artboard: a scrim over the window and a
-/// neumorphic card with the destination name, "Restrict access" + password,
+/// neumorphic card with the destination name, "Ask to connect",
 /// "Exclusive solo", the audio-device picker, and the Output 1/2 channel
 /// routing. Save applies; the scrim or Close cancels.
 class SettingsModal final : public juce::Component {
 public:
     struct Values {
         juce::String name;
-        bool requirePassword = false;
-        juce::String password;
         bool exclusiveSolo = false;
         bool askBeforeAccept = false;
         juce::String samplesFolder;
@@ -50,13 +48,10 @@ private:
 
     [[nodiscard]] juce::Rectangle<int> cardBounds() const;
     [[nodiscard]] Values gather() const;
-    void relayout();
     void showChannelMenu(bool left); ///< popup for one Output picker
     void refreshChannelTexts();
 
     juce::TextEditor m_name;
-    std::unique_ptr<CheckBox> m_restrict;
-    juce::TextEditor m_password;
     std::unique_ptr<CheckBox> m_exclusive;
     std::unique_ptr<CheckBox> m_ask;
     std::unique_ptr<Dropdown> m_folder;

@@ -30,13 +30,6 @@ public:
     [[nodiscard]] bool ignoreSenderVolume() const;
     void setIgnoreSenderVolume(bool ignore);
 
-    /// "Restrict access": require an RTSP password. Stored plaintext, like
-    /// the hardware id.
-    [[nodiscard]] bool requirePassword() const;
-    void setRequirePassword(bool require);
-    [[nodiscard]] juce::String password() const;
-    void setPassword(const juce::String& password);
-
     [[nodiscard]] bool exclusiveSolo() const;
     void setExclusiveSolo(bool exclusive);
 

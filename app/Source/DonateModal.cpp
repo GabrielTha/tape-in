@@ -39,9 +39,9 @@ public:
 };
 
 DonateModal::DonateModal()
-    : m_gabriel(juce::String(juce::CharPointer_UTF8("Gabriel ThÃ¡ ð§ð·")),
+    : m_gabriel(juce::String(juce::CharPointer_UTF8("Gabriel Th\xc3\xa1 \xf0\x9f\x87\xa7\xf0\x9f\x87\xb7")),
                 juce::URL("https://www.instagram.com/gabrielzuuk")),
-      m_adam(juce::String(juce::CharPointer_UTF8("Adam Kershen ð¨ð¦")),
+      m_adam(juce::String(juce::CharPointer_UTF8("Adam Kershen \xf0\x9f\x87\xa8\xf0\x9f\x87\xa6")),
              juce::URL("https://www.instagram.com/djadamk")),
       m_link("github.com/sponsors/GabrielTha", juce::URL(kDonateUrl))
 {

@@ -43,6 +43,9 @@ Engine::Engine(EngineConfig config, platform::IServiceAdvertiser& advertiser, st
         if (m_resolver) {
             m_dacp = std::make_unique<DacpClient>(*m_resolver);
         }
+        // A second resolver so name lookups never supersede an in-flight
+        // remote-control resolve (and vice versa).
+        m_nameResolver = resolverFactory(*m_reactor);
     }
     m_name = util::clampUtf8(m_config.receiver.name, 63);
     if (m_name.empty()) {
@@ -464,6 +467,25 @@ void Engine::emit(EngineEvent event)
     m_events.push_back(std::move(event));
 }
 
+namespace {
+
+/// "Gabriels-iPhone.local." -> "Gabriels iPhone": a readable fallback name
+/// from an mDNS host target.
+std::string displayNameFromHost(std::string host)
+{
+    if (!host.empty() && host.back() == '.') {
+        host.pop_back();
+    }
+    constexpr std::string_view kLocal = ".local";
+    if (host.size() > kLocal.size() && host.ends_with(kLocal)) {
+        host.resize(host.size() - kLocal.size());
+    }
+    std::replace(host.begin(), host.end(), '-', ' ');
+    return host;
+}
+
+} // namespace
+
 void Engine::onSessionStarted(const SessionInfo& info)
 {
     auto ring = buffer::HeapRing::create(m_config.ringFrames);
@@ -480,6 +502,9 @@ void Engine::onSessionStarted(const SessionInfo& info)
     }
     auto stream = std::move(streamResult.value());
 
+    std::string lookupDacpId;
+    uint64_t lookupSourceId = 0;
+    {
     std::lock_guard<std::mutex> lock(m_mutex);
     const std::string key = info.dacpId.empty() ? ("peer:" + info.peer.toString()) : info.dacpId;
     auto it = m_sources.find(key);
@@ -550,6 +575,35 @@ void Engine::onSessionStarted(const SessionInfo& info)
     applyTarget(*src);
     m_bySession[info.id] = src;
     emit({replacement ? EngineEvent::Kind::sourceChanged : EngineEvent::Kind::sourceAdded, src->sourceId, info.clientName});
+    if (m_nameResolver && src->info.clientName.empty() && !src->dacpId.empty()) {
+        lookupDacpId = src->dacpId;
+        lookupSourceId = src->sourceId;
+    }
+    }
+    if (!lookupDacpId.empty()) {
+        resolveClientName(lookupSourceId, lookupDacpId);
+    }
+}
+
+void Engine::resolveClientName(uint64_t sourceId, const std::string& dacpId)
+{
+    m_nameResolver->resolve(
+        "iTunes_Ctrl_" + dacpId, "_dacp._tcp", [this, sourceId](Result<platform::ResolvedService> result) {
+            if (!result.ok()) {
+                return; // sender not found; keep the peer-address fallback
+            }
+            const std::string name = displayNameFromHost(result.value().hostTarget);
+            if (name.empty()) {
+                return;
+            }
+            std::lock_guard<std::mutex> lock(m_mutex);
+            Source* src = byId(sourceId);
+            if (src == nullptr || !src->info.clientName.empty()) {
+                return; // gone, or it introduced itself meanwhile
+            }
+            src->info.clientName = name;
+            emit({EngineEvent::Kind::sourceChanged, sourceId, name});
+        });
 }
 
 void Engine::onPcm(uint64_t sessionId, const buffer::ReleasedBlock& block)

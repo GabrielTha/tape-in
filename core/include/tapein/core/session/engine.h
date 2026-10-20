@@ -221,6 +221,9 @@ private:
     Source* byId(uint64_t sourceId) noexcept; ///< m_mutex held
     void scheduleGc();
     void refreshStats(); ///< reactor thread: copy live session stats into the registry
+    /// Reactor thread, lock NOT held (a synchronous resolver calls back
+    /// inline): learn a nameless sender's name from its DACP host.
+    void resolveClientName(uint64_t sourceId, const std::string& dacpId);
     void emit(EngineEvent event); ///< m_mutex held
 
     EngineConfig m_config;
@@ -257,6 +260,7 @@ private:
 
     // Remote control. Declared last so they destruct before the reactor they
     // were bound to; m_dacp holds a reference into m_resolver, so it is last.
+    std::unique_ptr<platform::IServiceResolver> m_nameResolver; ///< names for nameless senders
     std::unique_ptr<platform::IServiceResolver> m_resolver;
     std::unique_ptr<DacpClient> m_dacp;
 };

@@ -61,6 +61,16 @@ private:
 };
 
 namespace {
+// Last-resort source name from the peer endpoint: "[fe80::1]:64368" -> "fe80::1".
+juce::String prettyPeer(const std::string& peer)
+{
+    juce::String p(peer);
+    if (p.startsWith("[")) {
+        return p.fromFirstOccurrenceOf("[", false, false).upToFirstOccurrenceOf("]", false, false);
+    }
+    return p.upToLastOccurrenceOf(":", false, false);
+}
+
 const char* stateText(core::dsp::StreamState s, bool live)
 {
     if (!live) {
@@ -210,7 +220,7 @@ void SourceRow::update(const core::session::SourceSnapshot& snap)
     m_live = snap.live;
     m_playing = snap.state == core::dsp::StreamState::playing || snap.state == core::dsp::StreamState::fadingOut;
 
-    const juce::String device = snap.clientName.empty() ? juce::String(snap.peer) : juce::String(snap.clientName);
+    const juce::String device = snap.clientName.empty() ? prettyPeer(snap.peer) : juce::String(snap.clientName);
     juce::String title = juce::String(snap.trackName);
     juce::String subtitle;
     if (title.isEmpty()) {
@@ -260,7 +270,7 @@ void SourceRow::update(const core::session::SourceSnapshot& snap)
 
     m_pending = snap.pending;
     if (m_pending) {
-        const juce::String device = snap.clientName.empty() ? juce::String(snap.peer) : juce::String(snap.clientName);
+        const juce::String device = snap.clientName.empty() ? prettyPeer(snap.peer) : juce::String(snap.clientName);
         m_title.setColour(juce::Label::textColourId, theme::colours::text);
         m_title.setText(device, juce::dontSendNotification);
         m_subtitle.setColour(juce::Label::textColourId, theme::colours::muted);
@@ -352,15 +362,6 @@ void SourceRow::paint(juce::Graphics& g)
         g.setColour(tagColour);
         g.fillEllipse(tag.getX() - 13.0f, tag.getCentreY() - 3.0f, 6.0f, 6.0f);
         g.drawText(tagText, tag, juce::Justification::centredLeft);
-    }
-
-    // Dashed separator above the empty-slot caption.
-    if (m_empty) {
-        const auto sub = m_subtitle.getBounds().toFloat();
-        g.setColour(juce::Colour(0x14ffffff));
-        const float y = sub.getY() - 5.0f;
-        const float dash[] = {3.0f, 3.0f};
-        g.drawDashedLine({{sub.getX(), y}, {sub.getRight(), y}}, dash, 2, 1.0f);
     }
 
     // Speaker glyphs flanking the volume slider (hidden while pending, when the

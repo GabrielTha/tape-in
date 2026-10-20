@@ -768,3 +768,21 @@ TEST_CASE("the waveform preview scrolls with time, not with packet count")
     // paint 60 bins, only as many as the elapsed time allows (+2 slack).
     CHECK(nonZero <= elapsedMs / 8 + 2);
 }
+
+TEST_CASE("a nameless sender is named from its resolved DACP host")
+{
+    using tapein::core::platform::ResolvedService;
+    using tapein::platform::NullServiceResolver;
+
+    ResolvedService svc{"iTunes_Ctrl_X", "Gabriels-iPhone.local.", loopback(1)};
+    Fixture fx(BufferMode::monitoring, 2, 300ms,
+               [svc](net::Reactor&) -> std::unique_ptr<tapein::core::platform::IServiceResolver> {
+                   return std::make_unique<NullServiceResolver>(Result<ResolvedService>(svc));
+               });
+
+    auto c = fx.client();
+    c.clientName.clear(); // this sender never says who it is
+    REQUIRE(c.startStream(true).status == 200);
+    REQUIRE(fx.pumpUntil([&] { return !fx.engine->sources().empty(); }));
+    REQUIRE(fx.pumpUntil([&] { return onlySource(fx).clientName == "Gabriels iPhone"; }, 1000ms));
+}

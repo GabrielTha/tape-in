@@ -66,6 +66,7 @@ struct RaopClient {
     std::string inbox;
     int cseq = 0;
     std::string dacpId = nextDacpId();
+    std::string clientName = "Test iPhone"; ///< empty omits X-Apple-Client-Name
     uint16_t serverPort = 0;
     uint16_t serverControlPort = 0;
     uint16_t serverTimingPort = 0;
@@ -182,7 +183,8 @@ struct RaopClient {
     {
         auto a = request("ANNOUNCE",
                          "Content-Type: application/sdp\r\nDACP-ID: " + dacpId + "\r\nActive-Remote: 424242\r\n"
-                         "User-Agent: AirPlay/740.6.1\r\nX-Apple-Client-Name: Test iPhone\r\n",
+                             "User-Agent: AirPlay/740.6.1\r\n"
+                             + (clientName.empty() ? "" : "X-Apple-Client-Name: " + clientName + "\r\n"),
                          announceBody(pcm, aesivB64, keyB64));
         REQUIRE(a.status == 200);
         const std::string transport = "Transport: RTP/AVP/UDP;unicast;interleaved=0-1;mode=record;control_port="

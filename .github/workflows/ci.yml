@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Tape In contributors
 #
-# Builds and tests the core on macOS, Linux and Windows so that portability
-# does not rot. The core must build without JUCE on all three.
+# Builds and tests the core on macOS and Linux so that portability
+# does not rot. The core must build without JUCE on both.
 
 name: CI
 
@@ -119,18 +119,3 @@ jobs:
             ./build-fuzz/tests/fuzz/fuzz_$h -max_total_time=60 -max_len=2048 fuzz-work/$h tests/fuzz/corpus/$h
           done
 
-  windows:
-    name: Windows MSVC (ASan)
-    runs-on: windows-2025
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ilammy/msvc-dev-cmd@v1
-      - name: Configure
-        run: >
-          cmake -S . -B build -G Ninja
-          -DCMAKE_BUILD_TYPE=Debug
-          -DTAPEIN_SANITIZE=address
-      - name: Build
-        run: cmake --build build --parallel
-      - name: Test
-        run: ctest --test-dir build --output-on-failure

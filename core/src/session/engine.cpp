@@ -303,6 +303,8 @@ void Engine::startRecording()
     std::lock_guard<std::mutex> lock(m_mutex);
     m_recordMix.clear();
     m_recordMix.reserve(static_cast<size_t>(kMaxRecordSeconds) * 44100u * 2u);
+    m_recordEnv.clear();
+    m_recordEnvDone = 0;
     // Sources already live at the downbeat start together at offset 0, so their
     // blocks mix-add on a shared timeline; a source that joins later is aligned
     // to the mix's length on its first block (onPcm).
@@ -353,6 +355,26 @@ std::vector<float> Engine::inputWaveform() const
     std::vector<float> out(kWaveformBins);
     m_mixer.playbackEnvelope(out.data(), out.size());
     return out;
+}
+
+std::vector<float> Engine::recordWaveform() const
+{
+    constexpr size_t kChunkSamples = 1024 * 2; ///< ~23 ms of interleaved stereo
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (!m_recording) {
+        return {};
+    }
+    // Bin only what arrived since the last call; the take caps at 60 s, so
+    // the envelope stays a few KB and this stays O(new samples).
+    while (m_recordEnvDone + kChunkSamples <= m_recordMix.size()) {
+        int32_t peak = 0;
+        for (size_t i = 0; i < kChunkSamples; ++i) {
+            peak = std::max(peak, std::abs(m_recordMix[m_recordEnvDone + i]));
+        }
+        m_recordEnv.push_back(std::min(1.0f, static_cast<float>(peak) / 32768.0f));
+        m_recordEnvDone += kChunkSamples;
+    }
+    return m_recordEnv;
 }
 
 void Engine::setUserGainDb(uint64_t sourceId, float dB)

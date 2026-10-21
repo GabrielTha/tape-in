@@ -774,3 +774,30 @@ TEST_CASE("a nameless sender is named from its resolved DACP host")
     REQUIRE(fx.pumpUntil([&] { return !fx.engine->sources().empty(); }));
     REQUIRE(fx.pumpUntil([&] { return onlySource(fx).clientName == "Gabriels iPhone"; }, 1000ms));
 }
+
+TEST_CASE("the record waveform grows with the capture as it happens")
+{
+    Fixture fx;
+    auto c = fx.client();
+    REQUIRE(c.startStream(true).status == 200);
+    REQUIRE(fx.pumpUntil([&] { return !fx.engine->sources().empty(); }));
+
+    fx.engine->startRecording();
+    CHECK(fx.engine->recordWaveform().empty()); // nothing captured yet
+
+    feedTone(fx, c, 30);
+    fx.pump(60ms);
+    const auto during = fx.engine->recordWaveform();
+    REQUIRE_FALSE(during.empty());
+    float peak = 0.0f;
+    for (float v : during) {
+        peak = std::max(peak, v);
+    }
+    CHECK(peak > 0.3f); // the tone shows while still recording
+
+    feedTone(fx, c, 30);
+    fx.pump(60ms);
+    CHECK(fx.engine->recordWaveform().size() > during.size()); // and it grows
+    (void)fx.engine->stopRecording();
+    CHECK(fx.engine->recordWaveform().empty()); // cleared once the take ends
+}

@@ -340,7 +340,9 @@ void MainComponent::timerCallback()
 
     const auto rec = m_app.engine()->recordStatus();
     m_record.setRecording(rec.recording, static_cast<int>(rec.frames / 44100));
-    m_record.setWaveform(m_app.engine()->inputWaveform());
+    // While taping, show the capture itself growing (it arrives ahead of
+    // playback); otherwise show the live playback envelope.
+    m_record.setWaveform(rec.recording ? m_app.engine()->recordWaveform() : m_app.engine()->inputWaveform());
 
     // Master output level: the meter strip plus the pixel-canvas shimmer.
     const auto [peakL, peakR] = m_app.engine()->mixer().consumePeaks();

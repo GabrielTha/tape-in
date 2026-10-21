@@ -158,6 +158,10 @@ public:
     /// playback, for the record bar's live waveform. Driven by the audio
     /// clock (the mixer render), so it scrolls steadily.
     [[nodiscard]] std::vector<float> inputWaveform() const;
+    /// While recording: the growing envelope of the capture itself (one bin
+    /// per ~23 ms of captured audio), so the bar shows what is being taped
+    /// the moment it arrives. Empty when not recording.
+    [[nodiscard]] std::vector<float> recordWaveform() const;
 
     void setUserGainDb(uint64_t sourceId, float dB);
     void setMute(uint64_t sourceId, bool mute);
@@ -252,6 +256,8 @@ private:
     // to int16. m_waveform is a rolling peak envelope for the live preview.
     bool m_recording = false;
     std::vector<int32_t> m_recordMix; ///< interleaved stereo mix accumulator
+    mutable std::vector<float> m_recordEnv; ///< per-chunk peaks of m_recordMix
+    mutable size_t m_recordEnvDone = 0; ///< interleaved samples already binned
     bool m_running = false;
     bool m_gcScheduled = false;
     net::Reactor::TimerId m_statsTimer = 0;

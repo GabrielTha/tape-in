@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.3.0-e0a35c" alt="Version 0.3.0">
+  <img src="https://img.shields.io/badge/version-0.3.1-e0a35c" alt="Version 0.3.1">
   <img src="https://img.shields.io/badge/platform-macOS%2013%2B-111" alt="macOS 13+">
   <img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue" alt="AGPL-3.0-or-later">
 </p>

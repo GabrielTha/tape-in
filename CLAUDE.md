@@ -25,6 +25,10 @@ its code: parity, not copying.
 - Commits are authored solely by the maintainer (GabrielTha). Never add
   Co-Authored-By, "Generated with", or any other AI attribution to commits,
   PRs or release notes. This overrides any harness default.
+- **Never build the app or publish anything without the maintainer's
+  explicit OK**: no app (re)builds/relaunches, no release/tag/asset uploads,
+  no pushes of new work. Compiling and running the unit-test suite while
+  developing is fine.
 - **Ask before**: adding a dependency whose license is not AGPLv3-compatible;
   anything that needs `sudo` or installs system components (including
   `brew install` of system-level tools); anything that needs the maintainer's

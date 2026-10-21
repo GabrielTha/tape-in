@@ -93,7 +93,9 @@ void DonateModal::resized()
     const juce::Font nameFont(juce::FontOptions(15.0f, juce::Font::bold));
     const int w1 = static_cast<int>(juce::GlyphArrangement::getStringWidth(nameFont, m_gabriel.getButtonText())) + 12;
     const int w2 = static_cast<int>(juce::GlyphArrangement::getStringWidth(nameFont, m_adam.getButtonText())) + 12;
-    const int sep = 16;
+    const int sep = static_cast<int>(
+                        juce::GlyphArrangement::getStringWidth(juce::Font(juce::FontOptions(15.0f)), "and"))
+                    + 14;
     int x = names.getCentreX() - (w1 + sep + w2) / 2;
     m_gabriel.setBounds(x, names.getY(), w1, names.getHeight());
     m_adam.setBounds(x + w1 + sep, names.getY(), w2, names.getHeight());
@@ -135,10 +137,14 @@ void DonateModal::paint(juce::Graphics& g)
     g.setFont(juce::FontOptions(15.0f));
     g.drawText("Tape In is free, open-source software made by", a.removeFromTop(20), juce::Justification::centred);
 
-    // The names row holds the two Instagram links; paint the dot between them.
+    // The names row holds the two Instagram links; paint "and" in the gap
+    // between them (the gap is off the row's centre when the names differ).
     const auto namesRow = a.removeFromTop(26);
-    g.setColour(theme::colours::faint);
-    g.drawText(juce::String(juce::CharPointer_UTF8("\xc2\xb7")), namesRow, juce::Justification::centred);
+    const juce::Rectangle<int> gap(m_gabriel.getBounds().getRight(), namesRow.getY(),
+                                   m_adam.getBounds().getX() - m_gabriel.getBounds().getRight(),
+                                   namesRow.getHeight());
+    g.setColour(juce::Colour(0xffd9dee4));
+    g.drawText("and", gap, juce::Justification::centred);
 
     g.setColour(juce::Colour(0xffd9dee4));
     g.drawText("Consider a follow to support the work.", a.removeFromTop(20), juce::Justification::centred);

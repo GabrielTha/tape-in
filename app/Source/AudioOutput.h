@@ -35,6 +35,11 @@ public:
     [[nodiscard]] double currentSampleRate() const;
     [[nodiscard]] std::unique_ptr<juce::XmlElement> deviceState() const;
 
+    /// Mutes the whole output (the master strip's M). The callback ramps the
+    /// gain over a few ms so toggling never clicks.
+    void setMasterMuted(bool muted);
+    [[nodiscard]] bool masterMuted() const;
+
     /// Called (on the message thread) whenever the device or its rate changes.
     std::function<void()> onDeviceChanged;
     /// Reports whether audio is currently running, for the mixer's garbage collector.
@@ -50,11 +55,16 @@ public:
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
 
 private:
+    /// Ramps toward the mute target and scales the rendered block (audio thread).
+    void applyMasterGain(float* const* channels, int numChannels, int numSamples);
+
     core::dsp::Mixer& m_mixer;
     juce::AudioDeviceManager m_deviceManager;
     std::atomic<double> m_sampleRate{44100.0};
     std::atomic<int> m_chanL{0}; ///< device channel playing the mix left
     std::atomic<int> m_chanR{1}; ///< device channel playing the mix right
+    std::atomic<float> m_masterTarget{1.0f}; ///< 0 muted, 1 open
+    float m_masterGain = 1.0f; ///< ramped gain, audio thread only
 };
 
 } // namespace tapein::app

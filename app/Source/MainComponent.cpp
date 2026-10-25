@@ -98,10 +98,6 @@ int indexForMode(core::session::BufferMode m)
         return 0;
     }
 }
-const char* latencyFor(int index)
-{
-    return index == 1 ? "~0.5" : index == 2 ? "~0.15" : "~2.0";
-}
 constexpr int kRowHeight = 130;
 } // namespace
 
@@ -187,7 +183,8 @@ MainComponent::MainComponent(AppEngine& app, Settings& settings) : m_app(app), m
     m_viewport.setScrollBarsShown(true, false);
     addAndMakeVisible(m_viewport);
 
-    // Master output meter below the global sampling bar.
+    // Master channel strip below the global sampling bar.
+    m_master.onMute = [this](bool muted) { m_app.audio().setMasterMuted(muted); };
     addAndMakeVisible(m_master);
 
     // Global sampling bar (above the footer).
@@ -323,9 +320,14 @@ void MainComponent::rebuildRows(const std::vector<core::session::SourceSnapshot>
         }
         resized();
     }
+    bool anySolo = false;
+    for (const auto& snap : snaps) {
+        anySolo = anySolo || snap.solo;
+    }
     for (int i = 0; i < desired; ++i) {
         if (i < static_cast<int>(snaps.size())) {
-            m_rows[static_cast<size_t>(i)]->update(snaps[static_cast<size_t>(i)]);
+            const auto& snap = snaps[static_cast<size_t>(i)];
+            m_rows[static_cast<size_t>(i)]->update(snap, !snap.mute && (!anySolo || snap.solo));
         } else {
             m_rows[static_cast<size_t>(i)]->setEmpty();
         }
@@ -356,10 +358,8 @@ void MainComponent::timerCallback()
                          juce::dontSendNotification);
         m_status.setColour(juce::Label::textColourId, juce::Colour(0xff5f6872)); // idle: dim
     } else {
-        const juce::String sep = juce::CharPointer_UTF8(" \xc2\xb7 ");
         const juce::String unit = m_liveCount == 1 ? " source" : " sources";
-        m_status.setText(juce::String(m_liveCount) + unit + sep + latencyFor(m_bufferIndex) + " s latency",
-                         juce::dontSendNotification);
+        m_status.setText(juce::String(m_liveCount) + unit, juce::dontSendNotification);
         m_status.setColour(juce::Label::textColourId, juce::Colour(0xff79b98a)); // live: green
     }
     if (!m_app.lastError().isEmpty()) {
@@ -411,7 +411,7 @@ void MainComponent::resized()
 
     // Global record bar above the footer (full width, horizontal), with the
     // master output meter strip right below it.
-    m_master.setBounds(r.removeFromBottom(14).reduced(18, 2));
+    m_master.setBounds(r.removeFromBottom(26).reduced(18, 0));
     m_record.setBounds(r.removeFromBottom(68));
 
     // Source list. Trim the top so the header-to-first-slot gap matches the

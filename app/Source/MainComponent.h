@@ -6,7 +6,7 @@
 #include "AppEngine.h"
 #include "DeviceButton.h"
 #include "DonateModal.h"
-#include "LevelMeter.h"
+#include "MasterStrip.h"
 #include "PixelCanvas.h"
 #include "RecordBar.h"
 #include "Settings.h"
@@ -72,8 +72,8 @@ private:
     juce::Component m_rowHost;
     std::vector<std::unique_ptr<SourceRow>> m_rows;
 
-    // Master output meter, directly below the record bar.
-    LevelMeter m_master;
+    // Master channel strip, directly below the record bar.
+    MasterStrip m_master;
 
     // Global sampling bar (above the footer).
     RecordBar m_record;

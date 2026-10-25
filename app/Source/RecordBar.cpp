@@ -5,6 +5,7 @@
 
 #include "Theme.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace tapein::app {
@@ -198,16 +199,24 @@ void RecordBar::paint(juce::Graphics& g)
         const int n = static_cast<int>(drawn.size());
         const float step = inner.getWidth() / static_cast<float>(n);
         const float bw = std::max(1.0f, step * 0.6f);
-        g.setColour(wire.withAlpha(m_recording || ready ? 0.9f : 0.55f));
+        const float baseAlpha = m_recording || ready ? 0.9f : 0.55f;
+        const float fadeBins = 10.0f; // edge fade, as the reference waveform
         for (int i = 0; i < n; ++i) {
             const float v = juce::jlimit(0.0f, 1.0f, drawn[static_cast<size_t>(i)]);
             const float h = std::max(1.0f, v * maxH);
             const float x = inner.getX() + static_cast<float>(i) * step;
+            const float edge = std::min({1.0f, (static_cast<float>(i) + 1.0f) / fadeBins,
+                                         static_cast<float>(n - i) / fadeBins});
+            g.setColour(wire.withAlpha(baseAlpha * edge));
             g.fillRoundedRectangle(x, midY - h, bw, h * 2.0f, bw * 0.5f);
         }
     } else {
+        // Idle: a dotted centre line, as the reference waveform's idle state.
         g.setColour(theme::colours::dim.withAlpha(0.5f));
-        g.fillRect(wave.getX() + 8.0f, wave.getCentreY() - 0.5f, wave.getWidth() - 16.0f, 1.0f);
+        const float y = wave.getCentreY() - 0.75f;
+        for (float x = wave.getX() + 9.0f; x < wave.getRight() - 9.0f; x += 6.0f) {
+            g.fillEllipse(x, y, 1.5f, 1.5f);
+        }
     }
 
     // Right-hand readout: elapsed time while recording, otherwise a hint.

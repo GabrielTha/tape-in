@@ -30,6 +30,7 @@ target_sources(TapeIn PRIVATE
     Source/Theme.cpp
     Source/PixelCanvas.cpp
     Source/LevelMeter.cpp
+    Source/MasterStrip.cpp
     Source/SourceRow.cpp
     Source/RecordBar.cpp
     Source/DeviceButton.cpp

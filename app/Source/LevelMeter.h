@@ -7,18 +7,36 @@
 
 namespace tapein::app {
 
-/// A horizontal stereo peak meter with a short decay. Fed linear 0..1 peaks.
+/// A horizontal stereo meter over a −60..0 dBFS scale: an RMS bar over a
+/// translucent peak bar, both filled through green/amber/red zones, with a
+/// peak-hold tick and a clip light that stays lit for 1.5 s after a full-scale
+/// peak. Fed linear 0..1 values once per UI tick (~30 Hz); peak attacks
+/// instantly and releases steadily, RMS is averaged. A dimmed meter (muted or
+/// solo-excluded channel) clears immediately and paints faded.
 class LevelMeter final : public juce::Component {
 public:
-    void setLevels(float peakL, float peakR);
+    /// Linear peaks per channel plus one linear RMS for both; a negative RMS
+    /// derives a VU-like average from the peaks instead.
+    void setLevels(float peakL, float peakR, float rms = -1.0f);
+    void setDimmed(bool dimmed);
+
     void paint(juce::Graphics& g) override;
 
 private:
-    [[nodiscard]] float decayed(float current, float& held) const;
-    void drawBar(juce::Graphics& g, juce::Rectangle<float> area, float level) const;
+    struct Channel {
+        float peak = 0.0f; ///< ballistic peak (linear)
+        float rms = 0.0f; ///< averaged level (linear)
+        float hold = 0.0f; ///< peak-hold value (linear)
+        int holdAge = 0; ///< ticks since the hold was last raised
+    };
 
-    float m_heldL = 0.0f;
-    float m_heldR = 0.0f;
+    void feed(Channel& ch, float peak, float rms);
+    void drawTrack(juce::Graphics& g, juce::Rectangle<float> area, const Channel& ch) const;
+
+    Channel m_left;
+    Channel m_right;
+    int m_clipAge = 1000; ///< ticks since the last full-scale peak
+    bool m_dimmed = false;
 };
 
 } // namespace tapein::app

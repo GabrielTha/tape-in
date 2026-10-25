@@ -24,7 +24,9 @@ public:
     SourceRow();
     ~SourceRow() override;
 
-    void update(const core::session::SourceSnapshot& snap);
+    /// `audible` is false when the slot is muted or excluded by another
+    /// slot's solo; its meter then clears and dims, like a console strip.
+    void update(const core::session::SourceSnapshot& snap, bool audible);
     void setEmpty();
     [[nodiscard]] uint64_t sourceId() const noexcept { return m_sourceId; }
 

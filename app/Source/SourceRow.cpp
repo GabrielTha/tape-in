@@ -207,13 +207,14 @@ void SourceRow::setEmpty()
     m_volume.setEnabled(false);
     m_solo.setEnabled(false);
     m_mute.setEnabled(false);
-    m_meter.setLevels(0.0f, 0.0f);
+    m_meter.setDimmed(false);
+    m_meter.setLevels(0.0f, 0.0f, 0.0f);
     applyControlVisibility();
     setAlpha(0.72f);
     repaint();
 }
 
-void SourceRow::update(const core::session::SourceSnapshot& snap)
+void SourceRow::update(const core::session::SourceSnapshot& snap, bool audible)
 {
     m_empty = false;
     m_sourceId = snap.sourceId;
@@ -251,7 +252,8 @@ void SourceRow::update(const core::session::SourceSnapshot& snap)
                         : juce::ImageFileFormat::loadFrom(snap.artwork.data(), snap.artwork.size());
     }
 
-    m_meter.setLevels(snap.peakL, snap.peakR);
+    m_meter.setDimmed(!audible);
+    m_meter.setLevels(snap.peakL, snap.peakR, snap.rms);
 
     if (std::abs(m_volume.getValue() - snap.userGainDb) > 0.05 && !m_volume.isMouseButtonDown())
         m_volume.setValue(snap.userGainDb, juce::dontSendNotification);
@@ -284,7 +286,7 @@ void SourceRow::update(const core::session::SourceSnapshot& snap)
 void SourceRow::resized()
 {
     auto r = getLocalBounds().reduced(14);
-    r.removeFromLeft(56 + 13); // art well + gap (painted)
+    r.removeFromLeft((getHeight() - 28) + 13); // full-height art well + gap (painted)
 
     auto sm = r.removeFromRight(30);
     m_solo.setBounds(sm.removeFromTop(26));
@@ -292,19 +294,20 @@ void SourceRow::resized()
     m_mute.setBounds(sm.removeFromTop(26));
     r.removeFromRight(13);
 
-    // Top area: title + subtitle. The state tag sits on the title line only
-    // (y 20..34), so reserve its space on the title row and let the subtitle
-    // use the full width — otherwise long captions truncate with an ellipsis.
-    auto top = r.removeFromTop(40);
+    // The strip stacks header / meter / controls with even gaps, like a
+    // console channel strip. The state tag sits on the title line only, so
+    // reserve its space on the title row and let the subtitle use the full
+    // width — otherwise long captions truncate with an ellipsis.
+    auto top = r.removeFromTop(36);
     auto titleRow = top.removeFromTop(20);
     titleRow.removeFromRight(92); // reserved for the state tag
     m_title.setBounds(titleRow);
     m_subtitle.setBounds(top.removeFromTop(16));
 
-    // Controls row along the bottom of the mid column; the strip left between
-    // it and the text block holds the per-source stereo meter.
+    // Controls row along the bottom of the mid column; the meter fills the
+    // band between it and the header with equal breathing room on both sides.
     auto ctrls = r.removeFromBottom(34);
-    m_meter.setBounds(r.reduced(0, 4));
+    m_meter.setBounds(r.reduced(0, 5));
 
     // Allow / Decline share the full controls row (shown only when pending).
     {
@@ -330,12 +333,13 @@ void SourceRow::paint(juce::Graphics& g)
     auto b = getLocalBounds().toFloat().reduced(3.0f);
     theme::drawRaised(g, b, 16.0f);
 
-    // Artwork well.
-    auto art = juce::Rectangle<float>(14.0f, 14.0f, 56.0f, 56.0f);
-    theme::drawInset(g, art, 13.0f, m_empty ? theme::colours::inset : theme::colours::slot);
+    // Artwork well: a square spanning the slot's full inner height.
+    const float side = static_cast<float>(getHeight()) - 28.0f;
+    auto art = juce::Rectangle<float>(14.0f, 14.0f, side, side);
+    theme::drawInset(g, art, 16.0f, m_empty ? theme::colours::inset : theme::colours::slot);
     if (m_artwork.isValid()) {
         juce::Path clip;
-        clip.addRoundedRectangle(art.reduced(1.5f), 11.5f);
+        clip.addRoundedRectangle(art.reduced(1.5f), 14.5f);
         g.saveState();
         g.reduceClipRegion(clip);
         // drawImage uses the context's current opacity; earlier shadow fills
@@ -345,9 +349,12 @@ void SourceRow::paint(juce::Graphics& g)
                     juce::RectanglePlacement::centred | juce::RectanglePlacement::fillDestination);
         g.restoreState();
     } else if (m_empty) {
-        theme::icons::stack(g, juce::Rectangle<float>(22, 22).withCentre(art.getCentre()), theme::colours::faint);
+        const float glyph = side * 0.30f;
+        theme::icons::stack(g, juce::Rectangle<float>(glyph, glyph).withCentre(art.getCentre()),
+                            theme::colours::faint);
     } else {
-        theme::icons::reel(g, juce::Rectangle<float>(24, 24).withCentre(art.getCentre()),
+        const float glyph = side * 0.33f;
+        theme::icons::reel(g, juce::Rectangle<float>(glyph, glyph).withCentre(art.getCentre()),
                            juce::Colour(0xff5c6672), 1.5f);
     }
 

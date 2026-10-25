@@ -3,6 +3,8 @@
 
 #include "AudioOutput.h"
 
+#include <algorithm>
+
 namespace tapein::app {
 
 AudioOutput::AudioOutput(core::dsp::Mixer& mixer) : m_mixer(mixer) {}
@@ -115,6 +117,36 @@ std::unique_ptr<juce::XmlElement> AudioOutput::deviceState() const
     return m_deviceManager.createStateXml();
 }
 
+void AudioOutput::setMasterMuted(bool muted)
+{
+    m_masterTarget.store(muted ? 0.0f : 1.0f, std::memory_order_relaxed);
+}
+
+bool AudioOutput::masterMuted() const
+{
+    return m_masterTarget.load(std::memory_order_relaxed) < 0.5f;
+}
+
+void AudioOutput::applyMasterGain(float* const* channels, int numChannels, int numSamples)
+{
+    const float target = m_masterTarget.load(std::memory_order_relaxed);
+    if (target >= 1.0f && m_masterGain >= 1.0f) {
+        return; // open and settled: nothing to scale
+    }
+    // Ramp over ~8 ms so mute/unmute never clicks.
+    const float step = 1.0f / (0.008f * static_cast<float>(m_sampleRate.load(std::memory_order_relaxed)));
+    for (int i = 0; i < numSamples; ++i) {
+        if (m_masterGain < target) {
+            m_masterGain = std::min(target, m_masterGain + step);
+        } else if (m_masterGain > target) {
+            m_masterGain = std::max(target, m_masterGain - step);
+        }
+        for (int c = 0; c < numChannels; ++c) {
+            channels[c][i] *= m_masterGain;
+        }
+    }
+}
+
 void AudioOutput::audioDeviceIOCallbackWithContext(const float* const*, int, float* const* outputChannelData,
                                                    int numOutputChannels, int numSamples,
                                                    const juce::AudioIODeviceCallbackContext&)
@@ -125,10 +157,12 @@ void AudioOutput::audioDeviceIOCallbackWithContext(const float* const*, int, flo
         && m_chanL.load(std::memory_order_relaxed) > m_chanR.load(std::memory_order_relaxed)) {
         float* swapped[2] = {outputChannelData[1], outputChannelData[0]};
         m_mixer.render(swapped, 2, static_cast<uint32_t>(numSamples), m_sampleRate.load());
+        applyMasterGain(outputChannelData, 2, numSamples);
         return;
     }
     m_mixer.render(outputChannelData, static_cast<uint32_t>(numOutputChannels), static_cast<uint32_t>(numSamples),
                    m_sampleRate.load());
+    applyMasterGain(outputChannelData, numOutputChannels, numSamples);
 }
 
 void AudioOutput::audioDeviceAboutToStart(juce::AudioIODevice* device)

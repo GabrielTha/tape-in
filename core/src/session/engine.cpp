@@ -359,7 +359,9 @@ std::vector<float> Engine::inputWaveform() const
 
 std::vector<float> Engine::recordWaveform() const
 {
-    constexpr size_t kChunkSamples = 1024 * 2; ///< ~23 ms of interleaved stereo
+    // One bin per 352 frames (~8 ms), matching the playback envelope, so the
+    // take scrolls across the view at the same speed instead of compressing.
+    constexpr size_t kChunkSamples = 352 * 2;
     std::lock_guard<std::mutex> lock(m_mutex);
     if (!m_recording) {
         return {};
@@ -374,7 +376,13 @@ std::vector<float> Engine::recordWaveform() const
         m_recordEnv.push_back(std::min(1.0f, static_cast<float>(peak) / 32768.0f));
         m_recordEnvDone += kChunkSamples;
     }
-    return m_recordEnv;
+    // A fixed window over the newest bins: content enters on the right and
+    // scrolls left, zero-padded until the take has filled one window.
+    std::vector<float> out(kWaveformBins, 0.0f);
+    const size_t n = std::min(m_recordEnv.size(), kWaveformBins);
+    std::copy(m_recordEnv.end() - static_cast<ptrdiff_t>(n), m_recordEnv.end(),
+              out.end() - static_cast<ptrdiff_t>(n));
+    return out;
 }
 
 void Engine::setUserGainDb(uint64_t sourceId, float dB)

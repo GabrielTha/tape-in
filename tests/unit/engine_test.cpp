@@ -775,7 +775,7 @@ TEST_CASE("a nameless sender is named from its resolved DACP host")
     REQUIRE(fx.pumpUntil([&] { return onlySource(fx).clientName == "Gabriels iPhone"; }, 1000ms));
 }
 
-TEST_CASE("the record waveform grows with the capture as it happens")
+TEST_CASE("the record waveform scrolls a fixed window as the capture advances")
 {
     Fixture fx;
     auto c = fx.client();
@@ -783,21 +783,28 @@ TEST_CASE("the record waveform grows with the capture as it happens")
     REQUIRE(fx.pumpUntil([&] { return !fx.engine->sources().empty(); }));
 
     fx.engine->startRecording();
-    CHECK(fx.engine->recordWaveform().empty()); // nothing captured yet
+    const auto fresh = fx.engine->recordWaveform();
+    REQUIRE(fresh.size() == kWaveformBins); // the window is full-size from the start
+    CHECK(*std::max_element(fresh.begin(), fresh.end()) == 0.0f);
 
     feedTone(fx, c, 30);
     fx.pump(60ms);
     const auto during = fx.engine->recordWaveform();
-    REQUIRE_FALSE(during.empty());
-    float peak = 0.0f;
-    for (float v : during) {
-        peak = std::max(peak, v);
-    }
-    CHECK(peak > 0.3f); // the tone shows while still recording
+    REQUIRE(during.size() == kWaveformBins);
+    CHECK(*std::max_element(during.begin(), during.end()) > 0.3f); // the tone shows while recording
 
-    feedTone(fx, c, 30);
+    // Feed enough silence that the loud bins scroll out of the window: the
+    // view slides along the take instead of compressing the whole of it.
+    for (int i = 30; i < 30 + 320; ++i) {
+        std::vector<int16_t> pcm(kSamples, 0);
+        c.sendAudio(static_cast<uint16_t>(i), static_cast<uint32_t>(i) * kFrames, l16Payload(pcm));
+        fx.reactor.runOnce(2ms);
+    }
     fx.pump(60ms);
-    CHECK(fx.engine->recordWaveform().size() > during.size()); // and it grows
+    const auto later = fx.engine->recordWaveform();
+    REQUIRE(later.size() == kWaveformBins);
+    CHECK(*std::max_element(later.begin(), later.end()) < 0.05f); // the tone scrolled out
+
     (void)fx.engine->stopRecording();
     CHECK(fx.engine->recordWaveform().empty()); // cleared once the take ends
 }
